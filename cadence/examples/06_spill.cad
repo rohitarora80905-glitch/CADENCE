@@ -1,0 +1,36 @@
+// Seventeen voices, sixteen MIDI channels, one of which is reserved for
+// percussion.  The allocator cannot colour this graph, so it SPILLS:
+// it picks the voices with the fewest notes and makes them share.
+// This is the musical version of "ran out of registers".
+
+tempo 140 ;
+key C major ;
+duration 4 ;
+velocity 70 ;
+
+instrument p = 0 ;      // instruments can also be given as GM program numbers
+
+phrase a = [ ^1 ^2 ] ;
+phrase b = [ ^3 ^4 ] ;
+phrase c = [ ^5 ] ;
+
+voice v1  on p = repeat 4 of a ;
+voice v2  on p = repeat 4 of b ;
+voice v3  on p = repeat 4 of a ;
+voice v4  on p = repeat 4 of b ;
+voice v5  on p = repeat 4 of a ;
+voice v6  on p = repeat 4 of b ;
+voice v7  on p = repeat 4 of a ;
+voice v8  on p = repeat 4 of b ;
+voice v9  on p = repeat 4 of a ;
+voice v10 on p = repeat 4 of b ;
+voice v11 on p = repeat 4 of a ;
+voice v12 on p = repeat 4 of b ;
+voice v13 on p = repeat 4 of a ;
+voice v14 on p = repeat 4 of b ;
+voice v15 on p = repeat 4 of a ;
+voice v16 on p = c ;
+voice v17 on p = c ;
+
+play v1 | v2 | v3 | v4 | v5 | v6 | v7 | v8 | v9 | v10
+   | v11 | v12 | v13 | v14 | v15 | v16 | v17 ;

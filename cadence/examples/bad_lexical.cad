@@ -1,0 +1,9 @@
+// DELIBERATELY BROKEN -- module 1.
+// Two lexical errors: a string that is never closed, and a character
+// that no token rule can start with.  The scanner reports both and
+// keeps going (panic-mode recovery) instead of stopping at the first.
+
+tempo 120 ;
+instrument piano = "grand piano ;
+voice tune on piano = [ C4 E4 $ G4 ] ;
+play tune ;

@@ -1,0 +1,825 @@
+<!doctype html><html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>03_riff.cad &mdash; Cadence compiler report</title><style>
+:root{--ink:#12151c;--paper:#f7f7f4;--card:#ffffff;--line:#dcdcd4;
+      --accent:#7a1f3d;--accent2:#1f6f6b;--muted:#6b6f76;--code:#f2f1ec;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+     font:15px/1.55 "Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+header{background:var(--ink);color:#fff;padding:22px 30px}
+header h1{margin:0;font-size:26px;letter-spacing:.4px}
+header p{margin:6px 0 0;color:#b9bec7;font-size:13px}
+nav{display:flex;flex-wrap:wrap;gap:2px;background:#20242e;padding:0 22px}
+nav a{color:#cfd4dc;text-decoration:none;padding:11px 14px;font-size:13px;
+      border-bottom:3px solid transparent}
+nav a:hover{background:#2b3040;color:#fff}
+nav a.on{background:var(--paper);color:var(--ink);border-bottom-color:var(--accent);
+         font-weight:600}
+main{padding:26px 30px 70px;max-width:1500px}
+section{display:none}
+section.on{display:block}
+h2{font-size:22px;margin:0 0 4px}
+h3{font-size:16px;margin:26px 0 8px;color:var(--accent)}
+h4{font-size:14px;margin:18px 0 6px;color:var(--accent2)}
+p.lead{color:var(--muted);margin:0 0 18px;max-width:80ch}
+table{border-collapse:collapse;width:100%;background:var(--card);font-size:13px;
+      margin:8px 0 14px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+th{background:#eceae3;text-align:left;padding:7px 9px;font-weight:600;
+   border-bottom:1px solid var(--line)}
+td{padding:6px 9px;border-bottom:1px solid #eeede8;vertical-align:top}
+tr:hover td{background:#fbfaf6}
+code,pre{font-family:"Cascadia Mono",Consolas,"Courier New",monospace}
+pre{background:var(--code);border:1px solid var(--line);padding:12px 14px;
+    overflow:auto;font-size:12.5px;line-height:1.45;max-height:520px}
+.cards{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0 22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;
+      padding:12px 16px;min-width:150px;flex:1}
+.card b{display:block;font-size:24px;color:var(--accent)}
+.card span{font-size:12px;color:var(--muted)}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;
+      font-weight:600}
+.ok{background:#e2f0e6;color:#1d6b34}.bad{background:#fbe3e3;color:#9c2020}
+.warn{background:#fdf0dc;color:#8a5a12}
+.two{display:flex;gap:18px;flex-wrap:wrap}.two>div{flex:1;min-width:340px}
+.note{border-left:3px solid var(--accent2);background:#eef6f5;padding:10px 14px;
+      font-size:13px;margin:12px 0}
+.roll{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px}
+small.mut{color:var(--muted)}
+</style></head><body>
+<header><h1>Cadence &mdash; a music DSL that compiles to MIDI</h1>
+<p>Glass-box compiler report &middot; 03_riff.cad &middot; pure Python, no dependencies</p></header>
+<nav><a data-t='overview' href='javascript:show("overview")'>Overview</a><a data-t='m1' href='javascript:show("m1")'>1 &middot; Lexical</a><a data-t='m2' href='javascript:show("m2")'>2 &middot; Syntax</a><a data-t='m3' href='javascript:show("m3")'>3 &middot; Semantic</a><a data-t='m4' href='javascript:show("m4")'>4 &middot; Intermediate code</a><a data-t='m5' href='javascript:show("m5")'>5 &middot; Optimisation</a><a data-t='m6' href='javascript:show("m6")'>6 &middot; Code generation</a><a data-t='verify' href='javascript:show("verify")'>Verifier</a><a data-t='out' href='javascript:show("out")'>Output</a><a data-t='metrics' href='javascript:show("metrics")'>Metrics</a></nav><main><section id='overview'>
+<h2>03_riff.cad &mdash; compiler report</h2>
+<p class='lead'>Generated 30 July 2026, 01:39 &middot; every table below is produced
+by the compiler itself while translating the program on the right, not written by hand.</p>
+<div class='cards'><div class='card'><b>93</b><span>tokens scanned</span></div><div class='card'><b>47</b><span>DFA states</span></div><div class='card'><b>114</b><span>LALR(1) states</span></div><div class='card'><b>0</b><span>grammar conflicts</span></div><div class='card'><b>83</b><span>IR instructions (naive)</span></div><div class='card'><b>59.2%</b><span>run-time work saved</span></div><div class='card'><b>27</b><span>notes emitted</span></div><div class='card'><b>3.75s</b><span>music length</span></div></div>
+<div class='two'><div><h3>The pipeline</h3>
+<pre>  source .cad
+    |  1  lexical analysis        regular expressions -> DFA (direct method) -> minimised -> maximal munch
+    v
+  tokens with attributes
+    |  2  syntax analysis         LALR(1) table built from the LR(1) collection, merged by core
+    v                             (cross-checked against a hand-written recursive-descent parser)
+  abstract syntax tree
+    |  3  semantic analysis       L-attributed SDD: key/octave/duration/transposition flow DOWN,
+    v                             ticks/note counts flow UP; scoped symbol table; type checks
+  annotated tree
+    |  4  intermediate code       three-address quads, backpatched loops, calls with activation records
+    v
+  naive three-address code -----> [ IR verifier: abstract interpretation, 5 safety properties ]
+    |  5  optimisation            CSE via DAG, inlining, unrolling, folding, copy propagation,
+    v                             liveness-driven dead-code elimination, peephole
+  optimised code
+    |  6  code generation         virtual machine with activation records; MIDI channel allocation
+    v                             by graph colouring (register allocation)
+  timed event stream -> Standard MIDI File (.mid)</pre></div>
+<div><h3>Source program</h3><pre>// Phrases with parameters, chords, repetition and transposition.
+// This is the program used in the report and the slides.
+
+tempo 120 ;
+key D minor ;
+duration 8 ;
+velocity 96 ;
+
+instrument piano = &quot;grand piano&quot; ;
+instrument bass  = &quot;electric bass&quot; ;
+
+// A phrase is a procedure.  Calling it pushes a real activation record.
+phrase riff(t) = transpose t of [ D4 F4 A4 &lt;D4 F4 A4&gt;/4 ] ;
+phrase tail    = [ ^5 ^3 ^1/4 r/8 ] ;
+
+voice lead on piano = repeat 2 of riff(0) tail ;
+voice low  on bass  = transpose -12 of [ repeat 2 of riff(0) ] ;
+
+play lead | low ;             // &#x27;|&#x27; means &quot;at the same time&quot;</pre>
+<h3>Result</h3><p><span class='pill ok'>compiled successfully</span>
+&nbsp;<span class='pill ok'>IR verified</span>
+&nbsp;<span class='pill ok'>optimiser preserved the music</span>
+&nbsp;<span class='pill ok'>both parsers agree</span></p>
+<p><small class='mut'>whole compilation took 62 ms
+(tables built once in 37 ms)</small></p></div></div></section><section id='m1'>
+<h2>Module 1 &mdash; Lexical analysis</h2>
+<p class='lead'>The token specification is a list of extended regular expressions.  They are
+combined into one syntax tree, numbered by position, and turned straight into a DFA by the
+direct method (nullable / firstpos / lastpos / followpos) &mdash; no NFA, no subset
+construction of an NFA, and no use of Python's <code>re</code> module anywhere.</p>
+<div class='cards'>
+<div class='card'><b>25</b><span>token rules</span></div>
+<div class='card'><b>101</b><span>numbered positions in the tree</span></div>
+<div class='card'><b>37</b><span>character classes (equivalence groups)</span></div>
+<div class='card'><b>47</b><span>DFA states, direct method</span></div>
+<div class='card'><b>47</b><span>DFA states, after minimisation</span></div>
+<div class='card'><b>19</b><span>reserved words (kept out of the DFA)</span></div>
+</div>
+<div class='note'><b>Why the minimiser finds nothing to merge here:</b> the direct method builds
+states as <i>sets of positions</i>, and two different position sets are only equivalent if
+they accept the same suffixes. For this specification no two were, so the DFA it produced was
+already minimal. The minimiser is proved to work on a deliberately redundant automaton in
+<code>tests/test_lexer.py</code> (5 states in, 4 out).</div>
+<h3>The specification (priority order)</h3>
+<table><tr><th>#</th><th>token</th><th>extended regular expression</th></tr><tr><td>1</td><td>WS</td><td>[ \t\r\n]+</td></tr><tr><td>2</td><td>COMMENT</td><td>//[^\n]*</td></tr><tr><td>3</td><td>STRING</td><td>\&quot;[^\&quot;\n]*\&quot;</td></tr><tr><td>4</td><td>BADSTRING</td><td>\&quot;[^\&quot;\n]*</td></tr><tr><td>5</td><td>NOTE</td><td>[A-G](#|b)?[0-8](/(1|2|4|8|16|32|64)\.?)?</td></tr><tr><td>6</td><td>DEGREE</td><td>\^[1-7](&#x27;|,)*(/(1|2|4|8|16|32|64)\.?)?</td></tr><tr><td>7</td><td>REST</td><td>(r|~)(/(1|2|4|8|16|32|64)\.?)?</td></tr><tr><td>8</td><td>PITCHNAME</td><td>[A-G](#|b)?</td></tr><tr><td>9</td><td>NUMBER</td><td>[0-9]+</td></tr><tr><td>10</td><td>ID</td><td>[a-z_][a-zA-Z0-9_]*</td></tr><tr><td>11</td><td>ASSIGN</td><td>=</td></tr><tr><td>12</td><td>SEMI</td><td>;</td></tr><tr><td>13</td><td>BAR</td><td>\|</td></tr><tr><td>14</td><td>LBRACK</td><td>\[</td></tr><tr><td>15</td><td>RBRACK</td><td>\]</td></tr><tr><td>16</td><td>LPAREN</td><td>\(</td></tr><tr><td>17</td><td>RPAREN</td><td>\)</td></tr><tr><td>18</td><td>SLASH</td><td>/</td></tr><tr><td>19</td><td>DOT</td><td>\.</td></tr><tr><td>20</td><td>PLUS</td><td>\+</td></tr><tr><td>21</td><td>MINUS</td><td>-</td></tr><tr><td>22</td><td>STAR</td><td>\*</td></tr><tr><td>23</td><td>COMMA</td><td>,</td></tr><tr><td>24</td><td>LT</td><td>&lt;</td></tr><tr><td>25</td><td>GT</td><td>&gt;</td></tr></table>
+<h3>Two rules that overlap &mdash; and how the scanner decides</h3>
+<div class='note'><code>r</code> matches both REST and ID.  <code>riff</code> matches ID (4
+characters) and REST (1 character), so <b>maximal munch</b> chooses ID.  A bare <code>r</code>
+matches both with length 1, so <b>rule priority</b> chooses REST, because REST is listed first.
+That is the whole tie-breaking policy of Lex, implemented here in ten lines.</div>
+<h3>Token stream for this program</h3>
+<table><tr><th>line:col</th><th>token</th><th>lexeme</th><th>attributes computed by the token&#x27;s action</th></tr><tr><td>4:1</td><td>TEMPO</td><td>tempo</td><td>word=tempo</td></tr><tr><td>4:7</td><td>NUMBER</td><td>120</td><td>value=120</td></tr><tr><td>4:11</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>5:1</td><td>KEY</td><td>key</td><td>word=key</td></tr><tr><td>5:5</td><td>PITCHNAME</td><td>D</td><td>letter=D, accidental=0, pitch_class=2</td></tr><tr><td>5:7</td><td>MODE</td><td>minor</td><td>word=minor</td></tr><tr><td>5:13</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>6:1</td><td>DURATION</td><td>duration</td><td>word=duration</td></tr><tr><td>6:10</td><td>NUMBER</td><td>8</td><td>value=8</td></tr><tr><td>6:12</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>7:1</td><td>VELOCITY</td><td>velocity</td><td>word=velocity</td></tr><tr><td>7:10</td><td>NUMBER</td><td>96</td><td>value=96</td></tr><tr><td>7:13</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>9:1</td><td>INSTRUMENT</td><td>instrument</td><td>word=instrument</td></tr><tr><td>9:12</td><td>ID</td><td>piano</td><td>name=piano</td></tr><tr><td>9:18</td><td>ASSIGN</td><td>=</td><td></td></tr><tr><td>9:20</td><td>STRING</td><td>&quot;grand piano&quot;</td><td>value=grand piano</td></tr><tr><td>9:34</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>10:1</td><td>INSTRUMENT</td><td>instrument</td><td>word=instrument</td></tr><tr><td>10:12</td><td>ID</td><td>bass</td><td>name=bass</td></tr><tr><td>10:18</td><td>ASSIGN</td><td>=</td><td></td></tr><tr><td>10:20</td><td>STRING</td><td>&quot;electric bass&quot;</td><td>value=electric bass</td></tr><tr><td>10:36</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>13:1</td><td>PHRASE</td><td>phrase</td><td>word=phrase</td></tr><tr><td>13:8</td><td>ID</td><td>riff</td><td>name=riff</td></tr><tr><td>13:12</td><td>LPAREN</td><td>(</td><td></td></tr><tr><td>13:13</td><td>ID</td><td>t</td><td>name=t</td></tr><tr><td>13:14</td><td>RPAREN</td><td>)</td><td></td></tr><tr><td>13:16</td><td>ASSIGN</td><td>=</td><td></td></tr><tr><td>13:18</td><td>TRANSPOSE</td><td>transpose</td><td>word=transpose</td></tr><tr><td>13:28</td><td>ID</td><td>t</td><td>name=t</td></tr><tr><td>13:30</td><td>OF</td><td>of</td><td>word=of</td></tr><tr><td>13:33</td><td>LBRACK</td><td>[</td><td></td></tr><tr><td>13:35</td><td>NOTE</td><td>D4</td><td>letter=D, accidental=0, octave=4, den=None, dotted=False, pitch=62</td></tr><tr><td>13:38</td><td>NOTE</td><td>F4</td><td>letter=F, accidental=0, octave=4, den=None, dotted=False, pitch=65</td></tr><tr><td>13:41</td><td>NOTE</td><td>A4</td><td>letter=A, accidental=0, octave=4, den=None, dotted=False, pitch=69</td></tr><tr><td>13:44</td><td>LT</td><td>&lt;</td><td></td></tr><tr><td>13:45</td><td>NOTE</td><td>D4</td><td>letter=D, accidental=0, octave=4, den=None, dotted=False, pitch=62</td></tr><tr><td>13:48</td><td>NOTE</td><td>F4</td><td>letter=F, accidental=0, octave=4, den=None, dotted=False, pitch=65</td></tr><tr><td>13:51</td><td>NOTE</td><td>A4</td><td>letter=A, accidental=0, octave=4, den=None, dotted=False, pitch=69</td></tr><tr><td>13:53</td><td>GT</td><td>&gt;</td><td></td></tr><tr><td>13:54</td><td>SLASH</td><td>/</td><td></td></tr><tr><td>13:55</td><td>NUMBER</td><td>4</td><td>value=4</td></tr><tr><td>13:57</td><td>RBRACK</td><td>]</td><td></td></tr><tr><td>13:59</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>14:1</td><td>PHRASE</td><td>phrase</td><td>word=phrase</td></tr><tr><td>14:8</td><td>ID</td><td>tail</td><td>name=tail</td></tr><tr><td>14:16</td><td>ASSIGN</td><td>=</td><td></td></tr><tr><td>14:18</td><td>LBRACK</td><td>[</td><td></td></tr><tr><td>14:20</td><td>DEGREE</td><td>^5</td><td>degree=5, octave_shift=0, den=None, dotted=False</td></tr><tr><td>14:23</td><td>DEGREE</td><td>^3</td><td>degree=3, octave_shift=0, den=None, dotted=False</td></tr><tr><td>14:26</td><td>DEGREE</td><td>^1/4</td><td>degree=1, octave_shift=0, den=4, dotted=False</td></tr><tr><td>14:31</td><td>REST</td><td>r/8</td><td>den=8, dotted=False</td></tr><tr><td>14:35</td><td>RBRACK</td><td>]</td><td></td></tr><tr><td>14:37</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>16:1</td><td>VOICE</td><td>voice</td><td>word=voice</td></tr><tr><td>16:7</td><td>ID</td><td>lead</td><td>name=lead</td></tr><tr><td>16:12</td><td>ON</td><td>on</td><td>word=on</td></tr><tr><td>16:15</td><td>ID</td><td>piano</td><td>name=piano</td></tr><tr><td>16:21</td><td>ASSIGN</td><td>=</td><td></td></tr><tr><td>16:23</td><td>REPEAT</td><td>repeat</td><td>word=repeat</td></tr><tr><td>16:30</td><td>NUMBER</td><td>2</td><td>value=2</td></tr><tr><td>16:32</td><td>OF</td><td>of</td><td>word=of</td></tr><tr><td>16:35</td><td>ID</td><td>riff</td><td>name=riff</td></tr><tr><td>16:39</td><td>LPAREN</td><td>(</td><td></td></tr><tr><td>16:40</td><td>NUMBER</td><td>0</td><td>value=0</td></tr><tr><td>16:41</td><td>RPAREN</td><td>)</td><td></td></tr><tr><td>16:43</td><td>ID</td><td>tail</td><td>name=tail</td></tr><tr><td>16:48</td><td>SEMI</td><td>;</td><td></td></tr><tr><td>17:1</td><td>VOICE</td><td>voice</td><td>word=voice</td></tr></table><small class='mut'>showing 70 of 93 rows</small>
+<h3>Minimised DFA transition table (first 24 states)</h3>
+<table><tr><th>state</th><th>accepts</th><th>transitions</th></tr><tr><td>0</td><td></td><td>[/] -&gt; 1; [_a-qs-z] -&gt; 2; [(] -&gt; 3; [;] -&gt; 4; [A-G] -&gt; 5; [&gt;] -&gt; 6; [.] -&gt; 7; [0-9] -&gt; 8; [=] -&gt; 9; [|] -&gt; 10; [-] -&gt; 11; [&quot;] -&gt; 12; [*] -&gt; 13; [[] -&gt; 14; [&lt;] -&gt; 15; [\t,\n\r_] -&gt; 16; [r] -&gt; 17; [+] -&gt; 18; [)] -&gt; 19; [,] -&gt; 20; []] -&gt; 21; [^] -&gt; 22; [~] -&gt; 23</td></tr><tr><td>1</td><td>SLASH</td><td>[/] -&gt; 46</td></tr><tr><td>2</td><td>ID</td><td>[0-9A-Z_a-z] -&gt; 2</td></tr><tr><td>3</td><td>LPAREN</td><td></td></tr><tr><td>4</td><td>SEMI</td><td></td></tr><tr><td>5</td><td>PITCHNAME</td><td>[#b] -&gt; 38; [0-8] -&gt; 39</td></tr><tr><td>6</td><td>GT</td><td></td></tr><tr><td>7</td><td>DOT</td><td></td></tr><tr><td>8</td><td>NUMBER</td><td>[0-9] -&gt; 8</td></tr><tr><td>9</td><td>ASSIGN</td><td></td></tr><tr><td>10</td><td>BAR</td><td></td></tr><tr><td>11</td><td>MINUS</td><td></td></tr><tr><td>12</td><td>BADSTRING</td><td>[\t\r_,!#-~] -&gt; 12; [&quot;] -&gt; 37</td></tr><tr><td>13</td><td>STAR</td><td></td></tr><tr><td>14</td><td>LBRACK</td><td></td></tr><tr><td>15</td><td>LT</td><td></td></tr><tr><td>16</td><td>WS</td><td>[\t,\n\r_] -&gt; 16</td></tr><tr><td>17</td><td>REST</td><td>[0-9A-Z_a-z] -&gt; 2; [/] -&gt; 24</td></tr><tr><td>18</td><td>PLUS</td><td></td></tr><tr><td>19</td><td>RPAREN</td><td></td></tr><tr><td>20</td><td>COMMA</td><td></td></tr><tr><td>21</td><td>RBRACK</td><td></td></tr><tr><td>22</td><td></td><td>[1-7] -&gt; 30</td></tr><tr><td>23</td><td>REST</td><td>[/] -&gt; 24</td></tr></table></section><section id='m2'>
+<h2>Module 2 &mdash; Syntax analysis</h2>
+<p class='lead'>One grammar, four parsers built from it: an LL(1) table (which fails, and the
+report shows why), and the SLR(1), CLR(1) and LALR(1) tables built from the LR(0) and LR(1)
+item collections.  The LALR table is the one that actually parses.</p>
+<h3>Parse table comparison &mdash; the metric that matters</h3>
+<table><tr><th>parser</th><th>states</th><th>table entries</th><th>shift/reduce conflicts</th><th>reduce/reduce conflicts</th></tr><tr><td>SLR(1)</td><td>114</td><td>742</td><td>0</td><td>0</td></tr><tr><td>CLR(1)</td><td>204</td><td>1343</td><td>0</td><td>0</td></tr><tr><td>LALR(1)</td><td>114</td><td>742</td><td>0</td><td>0</td></tr></table>
+<div class='note'>CLR(1) needs <b>204</b> states because it keeps a
+separate state for every lookahead context.  Merging states with the same core gives LALR(1),
+which is back down to <b>114</b> states &mdash; the same as SLR(1) &mdash;
+<b>without</b> reintroducing a single conflict.  That is exactly the trade-off LALR exists to
+make, measured on our own grammar.</div>
+<h3>Why LL(1) cannot be used</h3>
+<p>The grammar is left-recursive in arglist, comp, decls, expr, idlist, notelist, seq, term, so the LL(1) table has
+56 conflicting entries. Recursive descent is still implemented (as an
+independent cross-check on the LALR parser) but its left recursion is turned into iteration
+by hand.</p>
+<table><tr><th>nonterminal</th><th>on lookahead</th><th>production A</th><th>production B</th></tr><tr><td>decls</td><td>VOICE</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>decls</td><td>DURATION</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>decls</td><td>KEY</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>decls</td><td>INSTRUMENT</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>decls</td><td>PHRASE</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>decls</td><td>TEMPO</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>decls</td><td>VELOCITY</td><td>decls -&gt; decls decl</td><td>decls -&gt; eps</td></tr><tr><td>idlist</td><td>ID</td><td>idlist -&gt; idlist COMMA ID</td><td>idlist -&gt; ID</td></tr><tr><td>onclause</td><td>ON</td><td>onclause -&gt; ON ID</td><td>onclause -&gt; ON DRUMS</td></tr><tr><td>comp</td><td>ID</td><td>comp -&gt; comp BAR seq</td><td>comp -&gt; seq</td></tr><tr><td>comp</td><td>TRANSPOSE</td><td>comp -&gt; comp BAR seq</td><td>comp -&gt; seq</td></tr><tr><td>comp</td><td>PITCHNAME</td><td>comp -&gt; comp BAR seq</td><td>comp -&gt; seq</td></tr></table><small class='mut'>showing 12 of 56 rows</small>
+<h3>The first draft of the grammar was ambiguous &mdash; here is the diagnosis</h3>
+<p>Sequencing was originally written <code>comp -> comp comp</code>, and a chord
+<code>(D4 F4 A4)/2</code> was written with the same brackets as a group <code>(...)</code>.
+Feeding that draft to the same table builder reports
+<b>24 shift/reduce</b> and <b>2 reduce/reduce</b>
+conflicts in 28 states. The reduce/reduce pair is the interesting one: after
+<code>( D4</code> the parser cannot know whether it is inside a chord or inside a group until
+after the closing bracket. The fix was to change the syntax, not to hack the table:
+chords now use <code>&lt; ... &gt;/2</code>, and sequencing became left-recursive through a
+separate <code>seq</code> nonterminal. The final grammar has
+<b>0</b> conflicts.</p>
+<table><tr><th>kind</th><th>state</th><th>lookahead</th><th>action A</th><th>action B</th><th>resolution</th></tr><tr><td>reduce/reduce</td><td>9</td><td>NOTE</td><td>reduce by comp -&gt; NOTE</td><td>reduce by notelist -&gt; NOTE</td><td>default rule: reduce by the earlier production</td></tr><tr><td>reduce/reduce</td><td>9</td><td>RPAREN</td><td>reduce by comp -&gt; NOTE</td><td>reduce by notelist -&gt; NOTE</td><td>default rule: reduce by the earlier production</td></tr><tr><td>shift/reduce</td><td>12</td><td>ID</td><td>shift, go to state 5</td><td>reduce by comp -&gt; comp comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>12</td><td>LPAREN</td><td>shift, go to state 7</td><td>reduce by comp -&gt; comp comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>12</td><td>TRANSPOSE</td><td>shift, go to state 1</td><td>reduce by comp -&gt; comp comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>12</td><td>BAR</td><td>shift, go to state 11</td><td>reduce by comp -&gt; comp comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>12</td><td>NOTE</td><td>shift, go to state 3</td><td>reduce by comp -&gt; comp comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>12</td><td>REPEAT</td><td>shift, go to state 6</td><td>reduce by comp -&gt; comp comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>14</td><td>ID</td><td>shift, go to state 5</td><td>reduce by comp -&gt; comp BAR comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr><tr><td>shift/reduce</td><td>14</td><td>LPAREN</td><td>shift, go to state 7</td><td>reduce by comp -&gt; comp BAR comp</td><td>default rule: prefer SHIFT (dangling-else style)</td></tr></table><small class='mut'>showing 10 of 26 rows</small>
+<h3>Productions of the final grammar</h3>
+<table><tr><th>#</th><th>left</th><th>right</th></tr><tr><td>0</td><td>program</td><td>decls play</td></tr><tr><td>1</td><td>decls</td><td>decls decl</td></tr><tr><td>2</td><td>decls</td><td>ε</td></tr><tr><td>3</td><td>decl</td><td>TEMPO expr SEMI</td></tr><tr><td>4</td><td>decl</td><td>KEY PITCHNAME MODE SEMI</td></tr><tr><td>5</td><td>decl</td><td>VELOCITY expr SEMI</td></tr><tr><td>6</td><td>decl</td><td>DURATION NUMBER SEMI</td></tr><tr><td>7</td><td>decl</td><td>INSTRUMENT ID ASSIGN insref SEMI</td></tr><tr><td>8</td><td>decl</td><td>PHRASE ID params ASSIGN comp SEMI</td></tr><tr><td>9</td><td>decl</td><td>VOICE ID onclause ASSIGN comp SEMI</td></tr><tr><td>10</td><td>insref</td><td>NUMBER</td></tr><tr><td>11</td><td>insref</td><td>STRING</td></tr><tr><td>12</td><td>insref</td><td>DRUMS</td></tr><tr><td>13</td><td>params</td><td>LPAREN idlist RPAREN</td></tr><tr><td>14</td><td>params</td><td>ε</td></tr><tr><td>15</td><td>idlist</td><td>idlist COMMA ID</td></tr><tr><td>16</td><td>idlist</td><td>ID</td></tr><tr><td>17</td><td>onclause</td><td>ON ID</td></tr><tr><td>18</td><td>onclause</td><td>ON DRUMS</td></tr><tr><td>19</td><td>onclause</td><td>ε</td></tr><tr><td>20</td><td>play</td><td>PLAY comp SEMI</td></tr><tr><td>21</td><td>comp</td><td>comp BAR seq</td></tr><tr><td>22</td><td>comp</td><td>seq</td></tr><tr><td>23</td><td>seq</td><td>seq elem</td></tr><tr><td>24</td><td>seq</td><td>elem</td></tr><tr><td>25</td><td>elem</td><td>REPEAT expr OF elem</td></tr><tr><td>26</td><td>elem</td><td>TRANSPOSE expr OF elem</td></tr><tr><td>27</td><td>elem</td><td>SLOW expr OF elem</td></tr><tr><td>28</td><td>elem</td><td>FAST expr OF elem</td></tr><tr><td>29</td><td>elem</td><td>LBRACK comp RBRACK</td></tr><tr><td>30</td><td>elem</td><td>LT notelist GT SLASH dur</td></tr><tr><td>31</td><td>elem</td><td>NOTE</td></tr><tr><td>32</td><td>elem</td><td>DEGREE</td></tr><tr><td>33</td><td>elem</td><td>REST</td></tr><tr><td>34</td><td>elem</td><td>PITCHNAME</td></tr><tr><td>35</td><td>elem</td><td>ID</td></tr><tr><td>36</td><td>elem</td><td>ID LPAREN arglist RPAREN</td></tr><tr><td>37</td><td>notelist</td><td>notelist noteatom</td></tr><tr><td>38</td><td>notelist</td><td>noteatom</td></tr><tr><td>39</td><td>noteatom</td><td>NOTE</td></tr><tr><td>40</td><td>noteatom</td><td>DEGREE</td></tr><tr><td>41</td><td>noteatom</td><td>PITCHNAME</td></tr><tr><td>42</td><td>dur</td><td>NUMBER</td></tr><tr><td>43</td><td>dur</td><td>NUMBER DOT</td></tr><tr><td>44</td><td>arglist</td><td>arglist COMMA expr</td></tr><tr><td>45</td><td>arglist</td><td>expr</td></tr><tr><td>46</td><td>expr</td><td>expr PLUS term</td></tr><tr><td>47</td><td>expr</td><td>expr MINUS term</td></tr><tr><td>48</td><td>expr</td><td>term</td></tr><tr><td>49</td><td>term</td><td>term STAR factor</td></tr><tr><td>50</td><td>term</td><td>term SLASH factor</td></tr><tr><td>51</td><td>term</td><td>factor</td></tr><tr><td>52</td><td>factor</td><td>NUMBER</td></tr><tr><td>53</td><td>factor</td><td>ID</td></tr><tr><td>54</td><td>factor</td><td>MINUS factor</td></tr><tr><td>55</td><td>factor</td><td>LPAREN expr RPAREN</td></tr></table>
+<h3>FIRST and FOLLOW</h3>
+<table><tr><th>nonterminal</th><th>FIRST</th><th>FOLLOW</th></tr><tr><td>arglist</td><td>ID, LPAREN, MINUS, NUMBER</td><td>COMMA, RPAREN</td></tr><tr><td>comp</td><td>DEGREE, FAST, ID, LBRACK, LT, NOTE, PITCHNAME, REPEAT, REST, SLOW, TRANSPOSE</td><td>BAR, RBRACK, SEMI</td></tr><tr><td>decl</td><td>DURATION, INSTRUMENT, KEY, PHRASE, TEMPO, VELOCITY, VOICE</td><td>DURATION, INSTRUMENT, KEY, PHRASE, PLAY, TEMPO, VELOCITY, VOICE</td></tr><tr><td>decls</td><td>, DURATION, INSTRUMENT, KEY, PHRASE, TEMPO, VELOCITY, VOICE</td><td>DURATION, INSTRUMENT, KEY, PHRASE, PLAY, TEMPO, VELOCITY, VOICE</td></tr><tr><td>dur</td><td>NUMBER</td><td>BAR, DEGREE, FAST, ID, LBRACK, LT, NOTE, PITCHNAME, RBRACK, REPEAT, REST, SEMI, SLOW, TRANSPOSE</td></tr><tr><td>elem</td><td>DEGREE, FAST, ID, LBRACK, LT, NOTE, PITCHNAME, REPEAT, REST, SLOW, TRANSPOSE</td><td>BAR, DEGREE, FAST, ID, LBRACK, LT, NOTE, PITCHNAME, RBRACK, REPEAT, REST, SEMI, SLOW, TRANSPOSE</td></tr><tr><td>expr</td><td>ID, LPAREN, MINUS, NUMBER</td><td>COMMA, MINUS, OF, PLUS, RPAREN, SEMI</td></tr><tr><td>factor</td><td>ID, LPAREN, MINUS, NUMBER</td><td>COMMA, MINUS, OF, PLUS, RPAREN, SEMI, SLASH, STAR</td></tr><tr><td>idlist</td><td>ID</td><td>COMMA, RPAREN</td></tr><tr><td>insref</td><td>DRUMS, NUMBER, STRING</td><td>SEMI</td></tr><tr><td>noteatom</td><td>DEGREE, NOTE, PITCHNAME</td><td>DEGREE, GT, NOTE, PITCHNAME</td></tr><tr><td>notelist</td><td>DEGREE, NOTE, PITCHNAME</td><td>DEGREE, GT, NOTE, PITCHNAME</td></tr><tr><td>onclause</td><td>, ON</td><td>ASSIGN</td></tr><tr><td>params</td><td>, LPAREN</td><td>ASSIGN</td></tr><tr><td>play</td><td>PLAY</td><td>$</td></tr><tr><td>program</td><td>DURATION, INSTRUMENT, KEY, PHRASE, PLAY, TEMPO, VELOCITY, VOICE</td><td>$</td></tr><tr><td>seq</td><td>DEGREE, FAST, ID, LBRACK, LT, NOTE, PITCHNAME, REPEAT, REST, SLOW, TRANSPOSE</td><td>BAR, DEGREE, FAST, ID, LBRACK, LT, NOTE, PITCHNAME, RBRACK, REPEAT, REST, SEMI, SLOW, TRANSPOSE</td></tr><tr><td>term</td><td>ID, LPAREN, MINUS, NUMBER</td><td>COMMA, MINUS, OF, PLUS, RPAREN, SEMI, SLASH, STAR</td></tr></table>
+<h3>LALR parse of this program (stack / input / action)</h3>
+<table><tr><th>stack (top 8 states)</th><th>next input</th><th>action</th></tr><tr><td>0</td><td>tempo 120 ; key D minor</td><td>reduce decls -&gt; epsilon</td></tr><tr><td>0 1</td><td>tempo 120 ; key D minor</td><td>shift 3</td></tr><tr><td>0 1 3</td><td>120 ; key D minor ;</td><td>shift 37</td></tr><tr><td>0 1 3 37</td><td>; key D minor ; duration</td><td>reduce factor -&gt; NUMBER</td></tr><tr><td>0 1 3 36</td><td>; key D minor ; duration</td><td>reduce term -&gt; factor</td></tr><tr><td>0 1 3 31</td><td>; key D minor ; duration</td><td>reduce expr -&gt; term</td></tr><tr><td>0 1 3 112</td><td>; key D minor ; duration</td><td>shift 113</td></tr><tr><td>0 1 3 112 113</td><td>key D minor ; duration 8</td><td>reduce decl -&gt; TEMPO expr SEMI</td></tr><tr><td>0 1 4</td><td>key D minor ; duration 8</td><td>reduce decls -&gt; decls decl</td></tr><tr><td>0 1</td><td>key D minor ; duration 8</td><td>shift 5</td></tr><tr><td>0 1 5</td><td>D minor ; duration 8 ;</td><td>shift 109</td></tr><tr><td>0 1 5 109</td><td>minor ; duration 8 ; velocity</td><td>shift 110</td></tr><tr><td>0 1 5 109 110</td><td>; duration 8 ; velocity 96</td><td>shift 111</td></tr><tr><td>0 1 5 109 110 111</td><td>duration 8 ; velocity 96 ;</td><td>reduce decl -&gt; KEY PITCHNAME MODE SEMI</td></tr><tr><td>0 1 4</td><td>duration 8 ; velocity 96 ;</td><td>reduce decls -&gt; decls decl</td></tr><tr><td>0 1</td><td>duration 8 ; velocity 96 ;</td><td>shift 9</td></tr><tr><td>0 1 9</td><td>8 ; velocity 96 ; instrument</td><td>shift 86</td></tr><tr><td>0 1 9 86</td><td>; velocity 96 ; instrument piano</td><td>shift 87</td></tr><tr><td>0 1 9 86 87</td><td>velocity 96 ; instrument piano =</td><td>reduce decl -&gt; DURATION NUMBER SEMI</td></tr><tr><td>0 1 4</td><td>velocity 96 ; instrument piano =</td><td>reduce decls -&gt; decls decl</td></tr><tr><td>0 1</td><td>velocity 96 ; instrument piano =</td><td>shift 7</td></tr><tr><td>0 1 7</td><td>96 ; instrument piano = &quot;grand piano&quot;</td><td>shift 37</td></tr><tr><td>0 1 7 37</td><td>; instrument piano = &quot;grand piano&quot; ;</td><td>reduce factor -&gt; NUMBER</td></tr><tr><td>0 1 7 36</td><td>; instrument piano = &quot;grand piano&quot; ;</td><td>reduce term -&gt; factor</td></tr><tr><td>0 1 7 31</td><td>; instrument piano = &quot;grand piano&quot; ;</td><td>reduce expr -&gt; term</td></tr><tr><td>0 1 7 96</td><td>; instrument piano = &quot;grand piano&quot; ;</td><td>shift 97</td></tr><tr><td>0 1 7 96 97</td><td>instrument piano = &quot;grand piano&quot; ; instrument</td><td>reduce decl -&gt; VELOCITY expr SEMI</td></tr><tr><td>0 1 4</td><td>instrument piano = &quot;grand piano&quot; ; instrument</td><td>reduce decls -&gt; decls decl</td></tr><tr><td>0 1</td><td>instrument piano = &quot;grand piano&quot; ; instrument</td><td>shift 11</td></tr><tr><td>0 1 11</td><td>piano = &quot;grand piano&quot; ; instrument bass</td><td>shift 79</td></tr><tr><td>0 1 11 79</td><td>= &quot;grand piano&quot; ; instrument bass =</td><td>shift 80</td></tr><tr><td>0 1 11 79 80</td><td>&quot;grand piano&quot; ; instrument bass = &quot;electric bass&quot;</td><td>shift 84</td></tr><tr><td>0 1 11 79 80 84</td><td>; instrument bass = &quot;electric bass&quot; ;</td><td>reduce insref -&gt; STRING</td></tr><tr><td>0 1 11 79 80 82</td><td>; instrument bass = &quot;electric bass&quot; ;</td><td>shift 85</td></tr><tr><td>0 1 11 79 80 82 85</td><td>instrument bass = &quot;electric bass&quot; ; phrase</td><td>reduce decl -&gt; INSTRUMENT ID ASSIGN insref SEMI</td></tr><tr><td>0 1 4</td><td>instrument bass = &quot;electric bass&quot; ; phrase</td><td>reduce decls -&gt; decls decl</td></tr><tr><td>0 1</td><td>instrument bass = &quot;electric bass&quot; ; phrase</td><td>shift 11</td></tr><tr><td>0 1 11</td><td>bass = &quot;electric bass&quot; ; phrase riff</td><td>shift 79</td></tr><tr><td>0 1 11 79</td><td>= &quot;electric bass&quot; ; phrase riff (</td><td>shift 80</td></tr><tr><td>0 1 11 79 80</td><td>&quot;electric bass&quot; ; phrase riff ( t</td><td>shift 84</td></tr><tr><td>0 1 11 79 80 84</td><td>; phrase riff ( t )</td><td>reduce insref -&gt; STRING</td></tr><tr><td>0 1 11 79 80 82</td><td>; phrase riff ( t )</td><td>shift 85</td></tr><tr><td>0 1 11 79 80 82 85</td><td>phrase riff ( t ) =</td><td>reduce decl -&gt; INSTRUMENT ID ASSIGN insref SEMI</td></tr><tr><td>0 1 4</td><td>phrase riff ( t ) =</td><td>reduce decls -&gt; decls decl</td></tr><tr><td>0 1</td><td>phrase riff ( t ) =</td><td>shift 6</td></tr><tr><td>0 1 6</td><td>riff ( t ) = transpose</td><td>shift 98</td></tr><tr><td>0 1 6 98</td><td>( t ) = transpose t</td><td>shift 100</td></tr><tr><td>0 1 6 98 100</td><td>t ) = transpose t of</td><td>shift 102</td></tr><tr><td>0 1 6 98 100 102</td><td>) = transpose t of [</td><td>reduce idlist -&gt; ID</td></tr><tr><td>0 1 6 98 100 101</td><td>) = transpose t of [</td><td>shift 104</td></tr><tr><td>0 1 6 98 100 101 104</td><td>= transpose t of [ D4</td><td>reduce params -&gt; LPAREN idlist RPAREN</td></tr><tr><td>0 1 6 98 99</td><td>= transpose t of [ D4</td><td>shift 106</td></tr><tr><td>0 1 6 98 99 106</td><td>transpose t of [ D4 F4</td><td>shift 18</td></tr><tr><td>0 1 6 98 99 106 18</td><td>t of [ D4 F4 A4</td><td>shift 35</td></tr><tr><td>0 1 6 98 99 106 18 35</td><td>of [ D4 F4 A4 &lt;</td><td>reduce factor -&gt; ID</td></tr><tr><td>0 1 6 98 99 106 18 36</td><td>of [ D4 F4 A4 &lt;</td><td>reduce term -&gt; factor</td></tr><tr><td>0 1 6 98 99 106 18 31</td><td>of [ D4 F4 A4 &lt;</td><td>reduce expr -&gt; term</td></tr><tr><td>0 1 6 98 99 106 18 57</td><td>of [ D4 F4 A4 &lt;</td><td>shift 58</td></tr><tr><td>1 6 98 99 106 18 57 58</td><td>[ D4 F4 A4 &lt; D4</td><td>shift 15</td></tr><tr><td>6 98 99 106 18 57 58 15</td><td>D4 F4 A4 &lt; D4 F4</td><td>shift 13</td></tr></table><small class='mut'>showing 60 of 203 rows</small>
+<h3>Abstract syntax tree</h3>
+<pre>Program
+  .decls:
+    Tempo
+      .expr:
+        Num  (value=120)
+    Key  (letter=D, accidental=0, pitch_class=2, mode=minor)
+    DefaultDuration  (den=8)
+    Velocity
+      .expr:
+        Num  (value=96)
+    Instrument  (name=piano, program=grand piano)
+    Instrument  (name=bass, program=electric bass)
+    Phrase  (name=riff, params=[&#x27;t&#x27;])
+      .body:
+        Transpose
+          .amount:
+            VarRef  (name=t)
+          .body:
+            Group
+              .comp:
+                Seq
+                  .items:
+                    NoteAtom  (pitch=62, letter=D, accidental=0, octave=4, den=None, dotted=False)
+                    NoteAtom  (pitch=65, letter=F, accidental=0, octave=4, den=None, dotted=False)
+                    NoteAtom  (pitch=69, letter=A, accidental=0, octave=4, den=None, dotted=False)
+                    Chord  (den=4, dotted=False)
+                      .notes:
+                        NoteAtom  (pitch=62, letter=D, accidental=0, octave=4, den=None, dotted=False)
+                        NoteAtom  (pitch=65, letter=F, accidental=0, octave=4, den=None, dotted=False)
+                        NoteAtom  (pitch=69, letter=A, accidental=0, octave=4, den=None, dotted=False)
+    Phrase  (name=tail, params=[])
+      .body:
+        Group
+          .comp:
+            Seq
+              .items:
+                DegreeAtom  (degree=5, octave_shift=0, den=None, dotted=False)
+                DegreeAtom  (degree=3, octave_shift=0, den=None, dotted=False)
+                DegreeAtom  (degree=1, octave_shift=0, den=4, dotted=False)
+                RestAtom  (den=8, dotted=False)
+    Voice  (name=lead, instrument=piano)
+      .body:
+        Seq
+          .items:
+            Repeat
+              .count:
+                Num  (value=2)
+              .body:
+                Ref  (name=riff)
+                  .args:
+                    Num  (value=0)
+            Ref  (name=tail, args=[])
+    Voice  (name=low, instrument=bass)
+      .body:
+        Transpose
+          .amount:
+            Neg
+              .operand:
+                Num  (value=12)
+          .body:
+            Group
+              .comp:
+                Repeat
+                  .count:
+                    Num  (value=2)
+                  .body:
+                    Ref  (name=riff)
+                      .args:
+                        Num  (value=0)
+  .play:
+    Play
+      .comp:
+        Par
+          .branches:
+            Ref  (name=lead, args=[])
+            Ref  (name=low, args=[])</pre></section><section id='m3'>
+<h2>Module 3 &mdash; Semantic analysis (L-attributed SDD)</h2>
+<p class='lead'>Six attributes are <b>inherited</b> (passed down the tree) and three are
+<b>synthesised</b> (passed up).  Cadence needs inherited attributes for something real, not as
+an exercise: a bare <code>D</code> has no octave, <code>^5</code> has no pitch, and a note
+written without a length has no duration until the context supplies one.</p>
+<div class='two'><div>
+<h4>Inherited (flow down)</h4>
+<pre>key + mode      so ^5 can become a pitch
+octave          so a bare 'D' knows which D
+duration        so 'F4' with no /8 has a length
+velocity        how hard to strike
+transposition   accumulated by every enclosing transpose
+stretch n/d     accumulated by every enclosing slow/fast</pre>
+</div><div>
+<h4>Synthesised (flow up)</h4>
+<pre>ticks           how long this construct lasts
+note_count      how many notes are inside it
+pitch lo..hi    used for the out-of-range warning</pre>
+<h4>Checks performed</h4>
+<pre>undeclared / duplicate names       recursive phrases (cycle detection)
+wrong argument count               voice used inside a phrase
+tempo, velocity, program ranges    pitch pushed out of 0..127
+unknown instrument name (suggests) unused phrase / unplayed voice
+division by zero in a constant     note length inside a chord</pre>
+</div></div>
+<h3>Symbol table</h3>
+<table><tr><th>scope</th><th>name</th><th>kind</th><th>type</th><th>declared at</th><th>parameters / program</th><th>uses</th></tr><tr><td>global</td><td>piano</td><td>instrument</td><td>instrument</td><td>9:1</td><td>0</td><td>1</td></tr><tr><td>global</td><td>bass</td><td>instrument</td><td>instrument</td><td>10:1</td><td>33</td><td>1</td></tr><tr><td>global</td><td>riff</td><td>phrase</td><td>music</td><td>13:1</td><td>(t)</td><td>2</td></tr><tr><td>global</td><td>tail</td><td>phrase</td><td>music</td><td>14:1</td><td></td><td>1</td></tr><tr><td>global</td><td>lead</td><td>voice</td><td>voice</td><td>16:1</td><td>0</td><td>1</td></tr><tr><td>global</td><td>low</td><td>voice</td><td>voice</td><td>17:1</td><td>33</td><td>1</td></tr><tr><td>phrase riff</td><td>t</td><td>param</td><td>int</td><td>13:1</td><td></td><td>1</td></tr></table>
+<h3>Attribute flow while checking this program</h3>
+<p><small class='mut'>indentation = depth in the tree; left column = what was passed
+down, right column = what came back up</small></p>
+<table><tr><th>depth</th><th>node</th><th>inherited (down)</th><th>synthesised (up)</th></tr><tr><td>      3</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>      3</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>      3</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>        4</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>        4</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>        4</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>      3</td><td>Chord</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=3</td></tr><tr><td>    2</td><td>Seq</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>  1</td><td>Group</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>0</td><td>Transpose</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>    2</td><td>DegreeAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=240, notes=1, pitch 69..69</td></tr><tr><td>    2</td><td>DegreeAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=240, notes=1, pitch 65..65</td></tr><tr><td>    2</td><td>DegreeAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=480, notes=1, pitch 62..62</td></tr><tr><td>    2</td><td>RestAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=240, notes=0</td></tr><tr><td>  1</td><td>Seq</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=3, pitch 62..69</td></tr><tr><td>0</td><td>Group</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=3, pitch 62..69</td></tr><tr><td>            6</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>            6</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>            6</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>              7</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>              7</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>              7</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>            6</td><td>Chord</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=3</td></tr><tr><td>          5</td><td>Seq</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>        4</td><td>Group</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>      3</td><td>Transpose</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>    2</td><td>Ref</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>  1</td><td>Repeat</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=2400, notes=12</td></tr><tr><td>        4</td><td>DegreeAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=240, notes=1, pitch 69..69</td></tr><tr><td>        4</td><td>DegreeAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=240, notes=1, pitch 65..65</td></tr><tr><td>        4</td><td>DegreeAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=480, notes=1, pitch 62..62</td></tr><tr><td>        4</td><td>RestAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=240, notes=0</td></tr><tr><td>      3</td><td>Seq</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=3, pitch 62..69</td></tr><tr><td>    2</td><td>Group</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=3, pitch 62..69</td></tr><tr><td>  1</td><td>Ref</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=1200, notes=3, pitch 62..69</td></tr><tr><td>0</td><td>Seq</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=3600, notes=15, pitch 62..69</td></tr><tr><td>              7</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>              7</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>              7</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=240, notes=1</td></tr><tr><td>                8</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>                8</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>                8</td><td>NoteAtom</td><td>key=D minor, oct=4, dur=1/4, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=1</td></tr><tr><td>              7</td><td>Chord</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=480, notes=3</td></tr><tr><td>            6</td><td>Seq</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>          5</td><td>Group</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=?, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>        4</td><td>Transpose</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=-12, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>      3</td><td>Ref</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=-12, stretch=1/1</td><td>ticks=1200, notes=6</td></tr><tr><td>    2</td><td>Repeat</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=-12, stretch=1/1</td><td>ticks=2400, notes=12</td></tr><tr><td>  1</td><td>Group</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=-12, stretch=1/1</td><td>ticks=2400, notes=12</td></tr><tr><td>0</td><td>Transpose</td><td>key=D minor, oct=4, dur=1/8, vel=96, transpose=0, stretch=1/1</td><td>ticks=2400, notes=12</td></tr></table>
+<h3>Diagnostics</h3>
+<p><span class='pill ok'>no errors, no warnings</span></p></section><section id='m4'>
+<h2>Module 4 &mdash; Three-address code</h2>
+<p class='lead'>The generator is deliberately naive: every note emits the same six-instruction
+pattern even when the transposition is 0 and the stretch is 1/1.  That is the standard
+front-end / middle-end contract &mdash; and it is what gives Module 5 something to do.</p>
+<div class='note'><b>Backpatching.</b> <code>repeat n of X</code> needs a jump out of the loop
+before the label it jumps to exists.  The generator emits the jump with an empty target,
+keeps its index in a list (<i>makelist</i>), and fills it in when the label is finally
+generated (<i>backpatch</i>) &mdash; the textbook technique, visible in
+<code>irgen.py: _Repeat</code>.</div>
+<h3>Naive three-address code</h3>
+<pre>--- phrase riff($off, $sn, $sd, $t) -----------------------------
+   0      t1 = $off + $t   ; accumulate transposition
+   1      t2 = 62 + t1   ; D4: apply transposition
+   2      NOTEON  t2, vel 96   ; D4
+   3      t3 = 240 * $sn   ; D4: scale by stretch
+   4      t4 = t3 / $sd   ; D4: scale by stretch
+   5      DELAY   t4   ; D4
+   6      NOTEOFF t2   ; D4
+   7      t5 = 65 + t1   ; F4: apply transposition
+   8      NOTEON  t5, vel 96   ; F4
+   9      t6 = 240 * $sn   ; F4: scale by stretch
+  10      t7 = t6 / $sd   ; F4: scale by stretch
+  11      DELAY   t7   ; F4
+  12      NOTEOFF t5   ; F4
+  13      t8 = 69 + t1   ; A4: apply transposition
+  14      NOTEON  t8, vel 96   ; A4
+  15      t9 = 240 * $sn   ; A4: scale by stretch
+  16      t10 = t9 / $sd   ; A4: scale by stretch
+  17      DELAY   t10   ; A4
+  18      NOTEOFF t8   ; A4
+  19      t11 = 62 + t1   ; chord of 3: apply transposition
+  20      NOTEON  t11, vel 96   ; chord of 3
+  21      t12 = 65 + t1   ; chord of 3: apply transposition
+  22      NOTEON  t12, vel 96   ; chord of 3
+  23      t13 = 69 + t1   ; chord of 3: apply transposition
+  24      NOTEON  t13, vel 96   ; chord of 3
+  25      t14 = 480 * $sn   ; chord of 3: scale by stretch
+  26      t15 = t14 / $sd   ; chord of 3: scale by stretch
+  27      DELAY   t15   ; chord of 3
+  28      NOTEOFF t13   ; chord of 3
+  29      NOTEOFF t12   ; chord of 3
+  30      NOTEOFF t11   ; chord of 3
+  31      RET
+--- phrase tail($off, $sn, $sd) ---------------------------------
+   0      t1 = 69 + $off   ; degree ^5: apply transposition
+   1      NOTEON  t1, vel 96   ; degree ^5
+   2      t2 = 240 * $sn   ; degree ^5: scale by stretch
+   3      t3 = t2 / $sd   ; degree ^5: scale by stretch
+   4      DELAY   t3   ; degree ^5
+   5      NOTEOFF t1   ; degree ^5
+   6      t4 = 65 + $off   ; degree ^3: apply transposition
+   7      NOTEON  t4, vel 96   ; degree ^3
+   8      t5 = 240 * $sn   ; degree ^3: scale by stretch
+   9      t6 = t5 / $sd   ; degree ^3: scale by stretch
+  10      DELAY   t6   ; degree ^3
+  11      NOTEOFF t4   ; degree ^3
+  12      t7 = 62 + $off   ; degree ^1: apply transposition
+  13      NOTEON  t7, vel 96   ; degree ^1
+  14      t8 = 480 * $sn   ; degree ^1: scale by stretch
+  15      t9 = t8 / $sd   ; degree ^1: scale by stretch
+  16      DELAY   t9   ; degree ^1
+  17      NOTEOFF t7   ; degree ^1
+  18      t10 = 240 * $sn   ; rest: scale by stretch
+  19      t11 = t10 / $sd   ; rest: scale by stretch
+  20      DELAY   t11   ; rest
+  21      RET
+--- voice lead --------------------------------------------------
+   0      t1 = 2   ; loop counter
+   1  L1:
+   2      if t1 &lt;= 0 goto L2   ; exit when the counter runs out
+   3      PARAM   0   ; implicit: transposition
+   4      PARAM   1   ; implicit: stretch numerator
+   5      PARAM   1   ; implicit: stretch denominator
+   6      PARAM   0   ; argument
+   7      CALL    phrase riff, 4
+   8      t1 = t1 - 1   ; decrement
+   9      goto L1
+  10  L2:
+  11      PARAM   0   ; implicit: transposition
+  12      PARAM   1   ; implicit: stretch numerator
+  13      PARAM   1   ; implicit: stretch denominator
+  14      CALL    phrase tail, 3
+  15      RET
+--- voice low ---------------------------------------------------
+   0      t1 = 0 + -12   ; accumulate transposition
+   1      t2 = 2   ; loop counter
+   2  L1:
+   3      if t2 &lt;= 0 goto L2   ; exit when the counter runs out
+   4      PARAM   t1   ; implicit: transposition
+   5      PARAM   1   ; implicit: stretch numerator
+   6      PARAM   1   ; implicit: stretch denominator
+   7      PARAM   0   ; argument
+   8      CALL    phrase riff, 4
+   9      t2 = t2 - 1   ; decrement
+  10      goto L1
+  11  L2:
+  12      RET
+--- main --------------------------------------------------------
+   0      TEMPO   120
+   1      SPAWN   voice lead  (program 0)
+   2      SPAWN   voice low  (program 33)
+   3      RET</pre>
+<h4>Activation record for <code>phrase riff</code></h4><table><tr><th>slot</th><th>offset (words)</th></tr><tr><td>return address</td><td>0</td></tr><tr><td>control link (caller frame)</td><td>1</td></tr><tr><td>parameter $off</td><td>2</td></tr><tr><td>parameter $sn</td><td>3</td></tr><tr><td>parameter $sd</td><td>4</td></tr><tr><td>parameter $t</td><td>5</td></tr><tr><td>local t1</td><td>6</td></tr><tr><td>local t10</td><td>7</td></tr><tr><td>local t11</td><td>8</td></tr><tr><td>local t12</td><td>9</td></tr><tr><td>local t13</td><td>10</td></tr><tr><td>local t14</td><td>11</td></tr><tr><td>local t15</td><td>12</td></tr><tr><td>local t2</td><td>13</td></tr><tr><td>local t3</td><td>14</td></tr><tr><td>local t4</td><td>15</td></tr><tr><td>local t5</td><td>16</td></tr><tr><td>local t6</td><td>17</td></tr><tr><td>local t7</td><td>18</td></tr><tr><td>local t8</td><td>19</td></tr><tr><td>local t9</td><td>20</td></tr><tr><td>--- frame size (words)</td><td>21</td></tr></table></section><section id='m5'>
+<h2>Module 5 &mdash; Optimisation and data-flow analysis</h2>
+<p class='lead'>Every pass is measured twice: statically (how many instructions exist) and
+dynamically (how many the virtual machine actually executes).  Inlining and unrolling make the
+code <i>bigger</i> and the work <i>smaller</i>; that trade-off is the point, and it is visible
+in the two columns below.  The last column re-runs the program after each pass and compares
+the note-by-note event stream with the unoptimised run &mdash; a pass that changes what you
+hear is a bug.</p>
+<h3>Pass-by-pass measurement</h3>
+<table><tr><th>pass</th><th>static before</th><th>static after</th><th>delta</th><th>rewrites</th><th>instructions EXECUTED</th><th>music unchanged</th><th>detail</th></tr><tr><td>cse dag</td><td>83</td><td>83</td><td>+0</td><td>7</td><td>201</td><td>yes</td><td>7 repeated expression(s) reused from the DAG</td></tr><tr><td>inline phrases</td><td>83</td><td>152</td><td>-69</td><td>3</td><td>172</td><td>yes</td><td>3 call site(s) inlined</td></tr><tr><td>constant folding</td><td>152</td><td>152</td><td>+0</td><td>24</td><td>172</td><td>yes</td><td>24 expression(s) folded or simplified</td></tr><tr><td>copy propagation</td><td>152</td><td>152</td><td>+0</td><td>64</td><td>172</td><td>yes</td><td>64 operand(s) replaced by their source</td></tr><tr><td>loop unrolling</td><td>152</td><td>206</td><td>-54</td><td>2</td><td>148</td><td>yes</td><td>2 loop(s) unrolled</td></tr><tr><td>cse dag</td><td>206</td><td>206</td><td>+0</td><td>10</td><td>148</td><td>yes</td><td>10 repeated expression(s) reused from the DAG</td></tr><tr><td>constant folding</td><td>206</td><td>206</td><td>+0</td><td>3</td><td>148</td><td>yes</td><td>3 expression(s) folded or simplified</td></tr><tr><td>copy propagation</td><td>206</td><td>206</td><td>+0</td><td>57</td><td>148</td><td>yes</td><td>57 operand(s) replaced by their source</td></tr><tr><td>strength reduction</td><td>206</td><td>206</td><td>+0</td><td>0</td><td>148</td><td>yes</td><td>0 multiplication(s) turned into addition</td></tr><tr><td>dead code elimination</td><td>206</td><td>129</td><td>+77</td><td>77</td><td>82</td><td>yes</td><td>77 dead instruction(s) removed</td></tr><tr><td>remove unused procedures</td><td>129</td><td>86</td><td>+43</td><td>2</td><td>82</td><td>yes</td><td>removed phrase riff, phrase tail</td></tr><tr><td>peephole</td><td>86</td><td>86</td><td>+0</td><td>0</td><td>82</td><td>yes</td><td>0 peephole rewrite(s)</td></tr></table>
+<div class='cards'>
+<div class='card'><b>83</b><span>instructions, naive</span></div>
+<div class='card'><b>86</b><span>instructions, optimised</span></div>
+<div class='card'><b>201</b><span>executed, naive</span></div>
+<div class='card'><b>82</b><span>executed, optimised</span></div>
+<div class='card'><b>59.2%</b><span>work saved</span></div>
+</div>
+<h3>The DAG a basic block is turned into (this is what CSE searches)</h3>
+<pre>DAG for phrase riff, block B0 (32 instructions)
+
+  n3 = ADD(n1, n2)   -&gt; t1
+  n6 = ADD(n4, n3)   -&gt; t2
+  NOTEON   uses n6
+  n9 = MUL(n7, n8)   -&gt; t3
+  n12 = DIV(n9, n11)   -&gt; t4
+  DELAY    uses n12
+  NOTEOFF  uses n6
+  n14 = ADD(n13, n3)   -&gt; t5
+  NOTEON   uses n14
+  n9 reused for t6   &lt;-- common subexpression
+  n12 reused for t7   &lt;-- common subexpression
+  DELAY    uses n12
+  NOTEOFF  uses n14
+  n17 = ADD(n16, n3)   -&gt; t8
+  NOTEON   uses n17
+  n9 reused for t9   &lt;-- common subexpression
+  n12 reused for t10   &lt;-- common subexpression
+  DELAY    uses n12
+  NOTEOFF  uses n17
+  n6 reused for t11   &lt;-- common subexpression
+  NOTEON   uses n6
+  n14 reused for t12   &lt;-- common subexpression
+  NOTEON   uses n14
+  n17 reused for t13   &lt;-- common subexpression
+  NOTEON   uses n17
+  n20 = MUL(n19, n8)   -&gt; t14
+  n22 = DIV(n20, n11)   -&gt; t15
+  DELAY    uses n22
+  NOTEOFF  uses n17
+  NOTEOFF  uses n14
+  NOTEOFF  uses n6
+
+Leaves:
+  n1 = $off
+  n2 = $t
+  n4 = 62
+  n5 = t1
+  n7 = 240
+  n8 = $sn
+  n10 = t3
+  n11 = $sd
+  n13 = 65
+  n15 = t6
+  n16 = 69
+  n18 = t9
+  n19 = 480
+  n21 = t14</pre>
+<h3>Loop unrolling log</h3>
+<pre>voice lead: repeat 2 unrolled (31 -&gt; 62 instructions)
+voice low: repeat 2 unrolled (31 -&gt; 62 instructions)</pre>
+<h3>Inlining log</h3>
+<pre>phrase riff inlined into voice lead
+phrase tail inlined into voice lead
+phrase riff inlined into voice low</pre>
+<h3>Control-flow graph of <code>voice lead</code></h3>
+<pre>B0  (starts at 0)
+        t1 = 2
+    --&gt; B1
+
+B1  (starts at 1, label L1)
+        L1:
+        if t1 &lt;= 0 goto L2
+    --&gt; B3, B2
+
+B2  (starts at 3)
+        PARAM   0
+        PARAM   1
+        PARAM   1
+        PARAM   0
+        CALL    phrase riff, 4
+        t1 = t1 - 1
+        goto L1
+    --&gt; B1 [back edge]
+
+B3  (starts at 10, label L2)
+        L2:
+        PARAM   0
+        PARAM   1
+        PARAM   1
+        CALL    phrase tail, 3
+        RET
+    --&gt; (exit)
+</pre>
+<h4>Dominators and natural loops</h4>
+<table><tr><th>block</th><th>dominated by</th></tr><tr><td>B0</td><td>B0</td></tr><tr><td>B1</td><td>B0, B1</td></tr><tr><td>B2</td><td>B0, B1, B2</td></tr><tr><td>B3</td><td>B0, B1, B3</td></tr></table>
+<table><tr><th>loop header</th><th>back edge from</th><th>loop body</th></tr><tr><td>B1</td><td>B2</td><td>B1, B2</td></tr></table>
+<h3>Live variables (backward, union) &mdash; drives dead-code elimination</h3>
+<h4>iteration 1</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{t1}</td></tr><tr><td>B1</td><td>{t1}</td><td>{t1}</td></tr><tr><td>B2</td><td>{t1}</td><td>{}</td></tr><tr><td>B3</td><td>{}</td><td>{}</td></tr></table><h4>iteration 2</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{t1}</td></tr><tr><td>B1</td><td>{t1}</td><td>{t1}</td></tr><tr><td>B2</td><td>{t1}</td><td>{t1}</td></tr><tr><td>B3</td><td>{}</td><td>{}</td></tr></table><h4>iteration 3</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{t1}</td></tr><tr><td>B1</td><td>{t1}</td><td>{t1}</td></tr><tr><td>B2</td><td>{t1}</td><td>{t1}</td></tr><tr><td>B3</td><td>{}</td><td>{}</td></tr></table>
+<h3>Reaching definitions (forward, union)</h3>
+<table><tr><th>tag</th><th>definition</th></tr><tr><td>d0</td><td>t1 defined at instruction 0</td></tr><tr><td>d1</td><td>t1 defined at instruction 8</td></tr></table>
+<h4>iteration 1</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{d0}</td></tr><tr><td>B1</td><td>{d0, d1}</td><td>{d0, d1}</td></tr><tr><td>B2</td><td>{d0, d1}</td><td>{d1}</td></tr><tr><td>B3</td><td>{d0, d1}</td><td>{d0, d1}</td></tr></table><h4>iteration 2</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{d0}</td></tr><tr><td>B1</td><td>{d0, d1}</td><td>{d0, d1}</td></tr><tr><td>B2</td><td>{d0, d1}</td><td>{d1}</td></tr><tr><td>B3</td><td>{d0, d1}</td><td>{d0, d1}</td></tr></table>
+<h3>Available expressions (forward, intersection)</h3>
+<p><small class='mut'>universe: t1 SUB 1</small></p>
+<h4>iteration 1</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{}</td></tr><tr><td>B1</td><td>{}</td><td>{}</td></tr><tr><td>B2</td><td>{}</td><td>{t1 SUB 1}</td></tr><tr><td>B3</td><td>{}</td><td>{}</td></tr></table><h4>iteration 2</h4><table><tr><th>block</th><th>IN</th><th>OUT</th></tr><tr><td>B0</td><td>{}</td><td>{}</td></tr><tr><td>B1</td><td>{}</td><td>{}</td></tr><tr><td>B2</td><td>{}</td><td>{t1 SUB 1}</td></tr><tr><td>B3</td><td>{}</td><td>{}</td></tr></table>
+<h3>Optimised three-address code</h3>
+<pre>--- voice lead --------------------------------------------------
+   0      NOTEON  62, vel 96   ; D4
+   1      DELAY   240   ; D4
+   2      NOTEOFF 62   ; D4
+   3      NOTEON  65, vel 96   ; F4
+   4      DELAY   240   ; F4
+   5      NOTEOFF 65   ; F4
+   6      NOTEON  69, vel 96   ; A4
+   7      DELAY   240   ; A4
+   8      NOTEOFF 69   ; A4
+   9      NOTEON  62, vel 96   ; chord of 3
+  10      NOTEON  65, vel 96   ; chord of 3
+  11      NOTEON  69, vel 96   ; chord of 3
+  12      DELAY   480   ; chord of 3
+  13      NOTEOFF 69   ; chord of 3
+  14      NOTEOFF 65   ; chord of 3
+  15      NOTEOFF 62   ; chord of 3
+  16      NOTEON  62, vel 96   ; D4
+  17      DELAY   240   ; D4
+  18      NOTEOFF 62   ; D4
+  19      NOTEON  65, vel 96   ; F4
+  20      DELAY   240   ; F4
+  21      NOTEOFF 65   ; F4
+  22      NOTEON  69, vel 96   ; A4
+  23      DELAY   240   ; A4
+  24      NOTEOFF 69   ; A4
+  25      NOTEON  62, vel 96   ; chord of 3
+  26      NOTEON  65, vel 96   ; chord of 3
+  27      NOTEON  69, vel 96   ; chord of 3
+  28      DELAY   480   ; chord of 3
+  29      NOTEOFF 69   ; chord of 3
+  30      NOTEOFF 65   ; chord of 3
+  31      NOTEOFF 62   ; chord of 3
+  32      NOTEON  69, vel 96   ; degree ^5
+  33      DELAY   240   ; degree ^5
+  34      NOTEOFF 69   ; degree ^5
+  35      NOTEON  65, vel 96   ; degree ^3
+  36      DELAY   240   ; degree ^3
+  37      NOTEOFF 65   ; degree ^3
+  38      NOTEON  62, vel 96   ; degree ^1
+  39      DELAY   480   ; degree ^1
+  40      NOTEOFF 62   ; degree ^1
+  41      DELAY   240   ; rest
+  42      RET
+--- voice low ---------------------------------------------------
+   0      i2_t2 = 62 + -12   ; D4: apply transposition
+   1      NOTEON  i2_t2, vel 96   ; D4
+   2      DELAY   240   ; D4
+   3      NOTEOFF i2_t2   ; D4
+   4      i2_t5 = 65 + -12   ; F4: apply transposition
+   5      NOTEON  i2_t5, vel 96   ; F4
+   6      DELAY   240   ; F4
+   7      NOTEOFF i2_t5   ; F4
+   8      i2_t8 = 69 + -12   ; A4: apply transposition
+   9      NOTEON  i2_t8, vel 96   ; A4
+  10      DELAY   240   ; A4
+  11      NOTEOFF i2_t8   ; A4
+  12      NOTEON  i2_t2, vel 96   ; chord of 3
+  13      NOTEON  i2_t5, vel 96   ; chord of 3
+  14      NOTEON  i2_t8, vel 96   ; chord of 3
+  15      DELAY   480   ; chord of 3
+  16      NOTEOFF i2_t8   ; chord of 3
+  17      NOTEOFF i2_t5   ; chord of 3
+  18      NOTEOFF i2_t2   ; chord of 3
+  19      i2_t2 = i2_t2   ; D4: apply transposition (CSE)
+  20      NOTEON  i2_t2, vel 96   ; D4
+  21      DELAY   240   ; D4
+  22      NOTEOFF i2_t2   ; D4
+  23      i2_t5 = i2_t5   ; F4: apply transposition (CSE)
+  24      NOTEON  i2_t5, vel 96   ; F4
+  25      DELAY   240   ; F4
+  26      NOTEOFF i2_t5   ; F4
+  27      i2_t8 = i2_t8   ; A4: apply transposition (CSE)
+  28      NOTEON  i2_t8, vel 96   ; A4
+  29      DELAY   240   ; A4
+  30      NOTEOFF i2_t8   ; A4
+  31      NOTEON  i2_t2, vel 96   ; chord of 3
+  32      NOTEON  i2_t5, vel 96   ; chord of 3
+  33      NOTEON  i2_t8, vel 96   ; chord of 3
+  34      DELAY   480   ; chord of 3
+  35      NOTEOFF i2_t8   ; chord of 3
+  36      NOTEOFF i2_t5   ; chord of 3
+  37      NOTEOFF i2_t2   ; chord of 3
+  38      RET
+--- main --------------------------------------------------------
+   0      TEMPO   120
+   1      SPAWN   voice lead  (program 0)
+   2      SPAWN   voice low  (program 33)
+   3      RET</pre>
+<h3>Graphviz source for the control-flow graph</h3>
+<pre>digraph CFG {
+  node [shape=box, fontname=&quot;Courier&quot;];
+  B0 [label=&quot;B0\lt1 = 2\l&quot;];
+  B1 [label=&quot;B1\lL1:\lif t1 &lt;= 0 goto L2\l&quot;];
+  B2 [label=&quot;B2\lPARAM   0\lPARAM   1\lPARAM   1\lPARAM   0\lCALL    phrase riff, 4\lt1 = t1 - 1\lgoto L1\l&quot;];
+  B3 [label=&quot;B3\lL2:\lPARAM   0\lPARAM   1\lPARAM   1\lCALL    phrase tail, 3\lRET\l&quot;];
+  B0 -&gt; B1;
+  B1 -&gt; B3;
+  B1 -&gt; B2;
+  B2 -&gt; B1 [style=dashed, color=red, label=&quot;back edge&quot;];
+}</pre></section><section id='m6'>
+<h2>Module 6 &mdash; Code generation, activation records, register allocation</h2>
+<p class='lead'>The target is a small virtual machine.  Phrase calls push real activation
+records, and MIDI channels are allocated by graph colouring &mdash; the same algorithm as
+register allocation, with channel 10 pre-coloured for percussion because General MIDI reserves
+it.</p>
+<h3>Channel allocation (register allocation by another name)</h3>
+<table><tr><th>voice</th><th>GM program</th><th>live range (ticks)</th><th>notes</th><th>allocated</th></tr><tr><td>lead</td><td>0</td><td>0..3360</td><td>15</td><td>channel 2</td></tr><tr><td>low</td><td>33</td><td>0..2400</td><td>12</td><td>channel 1</td></tr></table>
+<h4>Interference graph</h4>
+<table><tr><th>voice</th><th>interferes with</th><th>why</th></tr><tr><td>lead</td><td>low</td><td>overlap in time</td></tr></table>
+<h4>Simplify order (Chaitin)</h4>
+<table><tr><th>node removed</th><th>degree at removal</th></tr><tr><td>lead</td><td>degree 1</td></tr><tr><td>low</td><td>degree 0</td></tr></table>
+<p><span class='pill ok'>no spills &mdash; the graph was colourable with 15 channels</span></p>
+<h4>Program changes emitted</h4>
+<table><tr><th>channel</th><th>at tick</th><th>program</th><th>for voice</th></tr><tr><td>0</td><td>0</td><td>33</td><td>low</td></tr><tr><td>1</td><td>0</td><td>0</td><td>lead</td></tr></table>
+<h3>Activation-record stack as the program runs</h3>
+<table><tr><th>step</th><th>frames (innermost last)</th></tr><tr><td>8</td><td>voice lead [ret=-1, link=-1] {t1=2} | phrase riff [ret=8, link=0] {$off=0, $sn=1, $sd=1, $t=0}</td></tr><tr><td>49</td><td>voice lead [ret=-1, link=-1] {t1=1} | phrase riff [ret=8, link=0] {$off=0, $sn=1, $sd=1, $t=0}</td></tr><tr><td>90</td><td>voice lead [ret=-1, link=-1] {t1=0} | phrase tail [ret=15, link=0] {$off=0, $sn=1, $sd=1}</td></tr><tr><td>122</td><td>voice low [ret=-1, link=-1] {t1=-12, t2=2} | phrase riff [ret=9, link=0] {$off=-12, $sn=1, $sd=1, $t=0}</td></tr><tr><td>163</td><td>voice low [ret=-1, link=-1] {t1=-12, t2=1} | phrase riff [ret=9, link=0] {$off=-12, $sn=1, $sd=1, $t=0}</td></tr></table>
+<h3>Virtual machine trace (naive code)</h3>
+<pre>     1  t=     0  depth=1  voice lead:0    t1 = 2
+     2  t=     0  depth=1  voice lead:1    L1:
+     3  t=     0  depth=1  voice lead:2    if t1 &lt;= 0 goto L2
+     4  t=     0  depth=1  voice lead:3    PARAM   0
+     5  t=     0  depth=1  voice lead:4    PARAM   1
+     6  t=     0  depth=1  voice lead:5    PARAM   1
+     7  t=     0  depth=1  voice lead:6    PARAM   0
+     8  t=     0  depth=1  voice lead:7    CALL    phrase riff, 4
+     9  t=     0  depth=2  phrase riff:0    t1 = $off + $t
+    10  t=     0  depth=2  phrase riff:1    t2 = 62 + t1
+    11  t=     0  depth=2  phrase riff:2    NOTEON  t2, vel 96
+    12  t=     0  depth=2  phrase riff:3    t3 = 240 * $sn
+    13  t=     0  depth=2  phrase riff:4    t4 = t3 / $sd
+    14  t=     0  depth=2  phrase riff:5    DELAY   t4
+    15  t=   240  depth=2  phrase riff:6    NOTEOFF t2
+    16  t=   240  depth=2  phrase riff:7    t5 = 65 + t1
+    17  t=   240  depth=2  phrase riff:8    NOTEON  t5, vel 96
+    18  t=   240  depth=2  phrase riff:9    t6 = 240 * $sn
+    19  t=   240  depth=2  phrase riff:10   t7 = t6 / $sd
+    20  t=   240  depth=2  phrase riff:11   DELAY   t7
+    21  t=   480  depth=2  phrase riff:12   NOTEOFF t5
+    22  t=   480  depth=2  phrase riff:13   t8 = 69 + t1
+    23  t=   480  depth=2  phrase riff:14   NOTEON  t8, vel 96
+    24  t=   480  depth=2  phrase riff:15   t9 = 240 * $sn
+    25  t=   480  depth=2  phrase riff:16   t10 = t9 / $sd
+    26  t=   480  depth=2  phrase riff:17   DELAY   t10
+    27  t=   720  depth=2  phrase riff:18   NOTEOFF t8
+    28  t=   720  depth=2  phrase riff:19   t11 = 62 + t1
+    29  t=   720  depth=2  phrase riff:20   NOTEON  t11, vel 96
+    30  t=   720  depth=2  phrase riff:21   t12 = 65 + t1
+    31  t=   720  depth=2  phrase riff:22   NOTEON  t12, vel 96
+    32  t=   720  depth=2  phrase riff:23   t13 = 69 + t1
+    33  t=   720  depth=2  phrase riff:24   NOTEON  t13, vel 96
+    34  t=   720  depth=2  phrase riff:25   t14 = 480 * $sn
+    35  t=   720  depth=2  phrase riff:26   t15 = t14 / $sd
+    36  t=   720  depth=2  phrase riff:27   DELAY   t15
+    37  t=  1200  depth=2  phrase riff:28   NOTEOFF t13
+    38  t=  1200  depth=2  phrase riff:29   NOTEOFF t12
+    39  t=  1200  depth=2  phrase riff:30   NOTEOFF t11
+    40  t=  1200  depth=2  phrase riff:31   RET
+    41  t=  1200  depth=1  voice lead:8    t1 = t1 - 1
+    42  t=  1200  depth=1  voice lead:9    goto L1
+    43  t=  1200  depth=1  voice lead:1    L1:
+    44  t=  1200  depth=1  voice lead:2    if t1 &lt;= 0 goto L2
+    45  t=  1200  depth=1  voice lead:3    PARAM   0
+    46  t=  1200  depth=1  voice lead:4    PARAM   1
+    47  t=  1200  depth=1  voice lead:5    PARAM   1
+    48  t=  1200  depth=1  voice lead:6    PARAM   0
+    49  t=  1200  depth=1  voice lead:7    CALL    phrase riff, 4
+    50  t=  1200  depth=2  phrase riff:0    t1 = $off + $t
+    51  t=  1200  depth=2  phrase riff:1    t2 = 62 + t1
+    52  t=  1200  depth=2  phrase riff:2    NOTEON  t2, vel 96
+    53  t=  1200  depth=2  phrase riff:3    t3 = 240 * $sn
+    54  t=  1200  depth=2  phrase riff:4    t4 = t3 / $sd
+    55  t=  1200  depth=2  phrase riff:5    DELAY   t4
+    56  t=  1440  depth=2  phrase riff:6    NOTEOFF t2
+    57  t=  1440  depth=2  phrase riff:7    t5 = 65 + t1
+    58  t=  1440  depth=2  phrase riff:8    NOTEON  t5, vel 96
+    59  t=  1440  depth=2  phrase riff:9    t6 = 240 * $sn
+    60  t=  1440  depth=2  phrase riff:10   t7 = t6 / $sd
+    61  t=  1440  depth=2  phrase riff:11   DELAY   t7
+    62  t=  1680  depth=2  phrase riff:12   NOTEOFF t5
+    63  t=  1680  depth=2  phrase riff:13   t8 = 69 + t1
+    64  t=  1680  depth=2  phrase riff:14   NOTEON  t8, vel 96
+    65  t=  1680  depth=2  phrase riff:15   t9 = 240 * $sn
+    66  t=  1680  depth=2  phrase riff:16   t10 = t9 / $sd
+    67  t=  1680  depth=2  phrase riff:17   DELAY   t10
+    68  t=  1920  depth=2  phrase riff:18   NOTEOFF t8
+    69  t=  1920  depth=2  phrase riff:19   t11 = 62 + t1
+    70  t=  1920  depth=2  phrase riff:20   NOTEON  t11, vel 96
+    71  t=  1920  depth=2  phrase riff:21   t12 = 65 + t1
+    72  t=  1920  depth=2  phrase riff:22   NOTEON  t12, vel 96
+    73  t=  1920  depth=2  phrase riff:23   t13 = 69 + t1
+    74  t=  1920  depth=2  phrase riff:24   NOTEON  t13, vel 96
+    75  t=  1920  depth=2  phrase riff:25   t14 = 480 * $sn
+    76  t=  1920  depth=2  phrase riff:26   t15 = t14 / $sd
+    77  t=  1920  depth=2  phrase riff:27   DELAY   t15
+    78  t=  2400  depth=2  phrase riff:28   NOTEOFF t13
+    79  t=  2400  depth=2  phrase riff:29   NOTEOFF t12
+    80  t=  2400  depth=2  phrase riff:30   NOTEOFF t11
+    81  t=  2400  depth=2  phrase riff:31   RET
+    82  t=  2400  depth=1  voice lead:8    t1 = t1 - 1
+    83  t=  2400  depth=1  voice lead:9    goto L1
+    84  t=  2400  depth=1  voice lead:1    L1:
+    85  t=  2400  depth=1  voice lead:2    if t1 &lt;= 0 goto L2
+    86  t=  2400  depth=1  voice lead:10   L2:
+    87  t=  2400  depth=1  voice lead:11   PARAM   0
+    88  t=  2400  depth=1  voice lead:12   PARAM   1
+    89  t=  2400  depth=1  voice lead:13   PARAM   1
+    90  t=  2400  depth=1  voice lead:14   CALL    phrase tail, 3
+... (111 more lines)</pre>
+<h3>Virtual machine trace (optimised code)</h3>
+<pre>     1  t=     0  depth=1  voice lead:0    NOTEON  62, vel 96
+     2  t=     0  depth=1  voice lead:1    DELAY   240
+     3  t=   240  depth=1  voice lead:2    NOTEOFF 62
+     4  t=   240  depth=1  voice lead:3    NOTEON  65, vel 96
+     5  t=   240  depth=1  voice lead:4    DELAY   240
+     6  t=   480  depth=1  voice lead:5    NOTEOFF 65
+     7  t=   480  depth=1  voice lead:6    NOTEON  69, vel 96
+     8  t=   480  depth=1  voice lead:7    DELAY   240
+     9  t=   720  depth=1  voice lead:8    NOTEOFF 69
+    10  t=   720  depth=1  voice lead:9    NOTEON  62, vel 96
+    11  t=   720  depth=1  voice lead:10   NOTEON  65, vel 96
+    12  t=   720  depth=1  voice lead:11   NOTEON  69, vel 96
+    13  t=   720  depth=1  voice lead:12   DELAY   480
+    14  t=  1200  depth=1  voice lead:13   NOTEOFF 69
+    15  t=  1200  depth=1  voice lead:14   NOTEOFF 65
+    16  t=  1200  depth=1  voice lead:15   NOTEOFF 62
+    17  t=  1200  depth=1  voice lead:16   NOTEON  62, vel 96
+    18  t=  1200  depth=1  voice lead:17   DELAY   240
+    19  t=  1440  depth=1  voice lead:18   NOTEOFF 62
+    20  t=  1440  depth=1  voice lead:19   NOTEON  65, vel 96
+    21  t=  1440  depth=1  voice lead:20   DELAY   240
+    22  t=  1680  depth=1  voice lead:21   NOTEOFF 65
+    23  t=  1680  depth=1  voice lead:22   NOTEON  69, vel 96
+    24  t=  1680  depth=1  voice lead:23   DELAY   240
+    25  t=  1920  depth=1  voice lead:24   NOTEOFF 69
+    26  t=  1920  depth=1  voice lead:25   NOTEON  62, vel 96
+    27  t=  1920  depth=1  voice lead:26   NOTEON  65, vel 96
+    28  t=  1920  depth=1  voice lead:27   NOTEON  69, vel 96
+    29  t=  1920  depth=1  voice lead:28   DELAY   480
+    30  t=  2400  depth=1  voice lead:29   NOTEOFF 69
+    31  t=  2400  depth=1  voice lead:30   NOTEOFF 65
+    32  t=  2400  depth=1  voice lead:31   NOTEOFF 62
+    33  t=  2400  depth=1  voice lead:32   NOTEON  69, vel 96
+    34  t=  2400  depth=1  voice lead:33   DELAY   240
+    35  t=  2640  depth=1  voice lead:34   NOTEOFF 69
+    36  t=  2640  depth=1  voice lead:35   NOTEON  65, vel 96
+    37  t=  2640  depth=1  voice lead:36   DELAY   240
+    38  t=  2880  depth=1  voice lead:37   NOTEOFF 65
+    39  t=  2880  depth=1  voice lead:38   NOTEON  62, vel 96
+    40  t=  2880  depth=1  voice lead:39   DELAY   480
+    41  t=  3360  depth=1  voice lead:40   NOTEOFF 62
+    42  t=  3360  depth=1  voice lead:41   DELAY   240
+    43  t=  3600  depth=1  voice lead:42   RET
+    44  t=     0  depth=1  voice low:0    i2_t2 = 62 + -12
+    45  t=     0  depth=1  voice low:1    NOTEON  i2_t2, vel 96
+    46  t=     0  depth=1  voice low:2    DELAY   240
+    47  t=   240  depth=1  voice low:3    NOTEOFF i2_t2
+    48  t=   240  depth=1  voice low:4    i2_t5 = 65 + -12
+    49  t=   240  depth=1  voice low:5    NOTEON  i2_t5, vel 96
+    50  t=   240  depth=1  voice low:6    DELAY   240
+    51  t=   480  depth=1  voice low:7    NOTEOFF i2_t5
+    52  t=   480  depth=1  voice low:8    i2_t8 = 69 + -12
+    53  t=   480  depth=1  voice low:9    NOTEON  i2_t8, vel 96
+    54  t=   480  depth=1  voice low:10   DELAY   240
+    55  t=   720  depth=1  voice low:11   NOTEOFF i2_t8
+    56  t=   720  depth=1  voice low:12   NOTEON  i2_t2, vel 96
+    57  t=   720  depth=1  voice low:13   NOTEON  i2_t5, vel 96
+    58  t=   720  depth=1  voice low:14   NOTEON  i2_t8, vel 96
+    59  t=   720  depth=1  voice low:15   DELAY   480
+    60  t=  1200  depth=1  voice low:16   NOTEOFF i2_t8
+... (22 more lines)</pre></section><section id='verify'>
+<h2>Security checking of virtual machine code</h2>
+<p class='lead'>The syllabus lists &ldquo;implementation of a naive code generator for a virtual
+machine, security checking of virtual machine code&rdquo;.  Before the VM executes anything, the
+generated code is checked by abstract interpretation over the control-flow graph.  These are the
+same five families of check a JVM bytecode verifier, a WebAssembly validator or the eBPF
+verifier performs.</p>
+<div class='note'>1. every jump target exists &nbsp;&middot;&nbsp; 2. every CALL matches the
+callee's arity and enough PARAMs were pushed on every path &nbsp;&middot;&nbsp;
+3. parallel-block nesting agrees at every merge point (the same shape of check as operand-stack
+depth agreement) &nbsp;&middot;&nbsp; 4. no local is read on a path where it was never written
+(a forward &ldquo;definitely assigned&rdquo; analysis, meet = intersection) &nbsp;&middot;&nbsp;
+5. every procedure ends in RET and cannot fall off the end.<br>
+The VM is also sandboxed at run time: step, frame-depth and event limits.</div>
+<p>Result: <span class='pill ok'>all checks passed</span>
+&nbsp; naive code &nbsp;&middot;&nbsp;
+<span class='pill ok'>all checks passed</span>
+&nbsp; optimised code</p>
+<table><tr><th>result</th><th>check</th><th>procedure</th></tr><tr><td>pass</td><td>jump targets resolve</td><td>phrase riff</td></tr><tr><td>pass</td><td>call arity and PARAM balance</td><td>phrase riff</td></tr><tr><td>pass</td><td>parallel blocks properly nested</td><td>phrase riff</td></tr><tr><td>pass</td><td>no local read before assignment</td><td>phrase riff</td></tr><tr><td>pass</td><td>procedure ends in RET</td><td>phrase riff</td></tr><tr><td>pass</td><td>jump targets resolve</td><td>phrase tail</td></tr><tr><td>pass</td><td>call arity and PARAM balance</td><td>phrase tail</td></tr><tr><td>pass</td><td>parallel blocks properly nested</td><td>phrase tail</td></tr><tr><td>pass</td><td>no local read before assignment</td><td>phrase tail</td></tr><tr><td>pass</td><td>procedure ends in RET</td><td>phrase tail</td></tr><tr><td>pass</td><td>jump targets resolve</td><td>voice lead</td></tr><tr><td>pass</td><td>call arity and PARAM balance</td><td>voice lead</td></tr><tr><td>pass</td><td>parallel blocks properly nested</td><td>voice lead</td></tr><tr><td>pass</td><td>no local read before assignment</td><td>voice lead</td></tr><tr><td>pass</td><td>procedure ends in RET</td><td>voice lead</td></tr><tr><td>pass</td><td>jump targets resolve</td><td>voice low</td></tr><tr><td>pass</td><td>call arity and PARAM balance</td><td>voice low</td></tr><tr><td>pass</td><td>parallel blocks properly nested</td><td>voice low</td></tr><tr><td>pass</td><td>no local read before assignment</td><td>voice low</td></tr><tr><td>pass</td><td>procedure ends in RET</td><td>voice low</td></tr><tr><td>pass</td><td>jump targets resolve</td><td>main</td></tr><tr><td>pass</td><td>call arity and PARAM balance</td><td>main</td></tr><tr><td>pass</td><td>parallel blocks properly nested</td><td>main</td></tr><tr><td>pass</td><td>no local read before assignment</td><td>main</td></tr><tr><td>pass</td><td>procedure ends in RET</td><td>main</td></tr></table></section><section id='out'>
+<h2>The output: a Standard MIDI File</h2>
+<p class='lead'>The compiler writes the bytes of the .mid file itself &mdash; header chunk,
+one track per voice, variable-length delta times.  Double-click it and it plays.</p>
+<h3>Piano roll of the compiled music</h3>
+<div class='roll'><svg viewBox='0 0 1380 336' width='100%' style='max-height:340px'><line x1='46' y1='334.9' x2='1370' y2='334.9' stroke='#e7e5de'/><text x='6' y='338.9' font-size='10' fill='#8b8f96'>MIDI 48</text><line x1='46' y1='149.3' x2='1370' y2='149.3' stroke='#e7e5de'/><text x='6' y='153.3' font-size='10' fill='#8b8f96'>MIDI 60</text><line x1='46.0' y1='10' x2='46.0' y2='304' stroke='#efeee8'/><text x='48.0' y='318' font-size='9.5' fill='#9b9fa6'>bar 1</text><line x1='802.6' y1='10' x2='802.6' y2='304' stroke='#efeee8'/><text x='804.6' y='318' font-size='9.5' fill='#9b9fa6'>bar 2</text><rect x='46.0' y='115.3' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='140.6' y='68.9' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='235.1' y='7.0' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='329.7' y='7.0' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='329.7' y='68.9' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='329.7' y='115.3' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='518.9' y='115.3' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='613.4' y='68.9' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='708.0' y='7.0' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='802.6' y='7.0' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='802.6' y='68.9' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='802.6' y='115.3' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='991.7' y='7.0' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='1086.3' y='68.9' width='93.6' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='1180.9' y='115.3' width='188.1' height='6' rx='2' fill='#7a1f3d' opacity='0.87'/><rect x='46.0' y='301.0' width='93.6' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='140.6' y='254.6' width='93.6' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='235.1' y='192.7' width='93.6' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='329.7' y='192.7' width='188.1' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='329.7' y='254.6' width='188.1' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='329.7' y='301.0' width='188.1' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='518.9' y='301.0' width='93.6' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='613.4' y='254.6' width='93.6' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='708.0' y='192.7' width='93.6' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='802.6' y='192.7' width='188.1' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='802.6' y='254.6' width='188.1' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='802.6' y='301.0' width='188.1' height='6' rx='2' fill='#1f6f6b' opacity='0.87'/><rect x='46' y='318' width='9' height='9' fill='#7a1f3d'/><text x='59' y='326' font-size='11' fill='#4a4e55'>voice lead</text><rect x='140' y='318' width='9' height='9' fill='#1f6f6b'/><text x='153' y='326' font-size='11' fill='#4a4e55'>voice low</text></svg></div>
+<h3>File</h3>
+<div class='cards'>
+<div class='card'><b>348</b><span>bytes written</span></div>
+<div class='card'><b>2</b><span>tracks (one per voice)</span></div>
+<div class='card'><b>27</b><span>notes</span></div>
+<div class='card'><b>3.75s</b><span>duration</span></div>
+</div>
+<h3>First 256 bytes of the .mid file</h3>
+<pre>0000  4d 54 68 64 00 00 00 06 00 01 00 03 01 e0 4d 54  MThd..........MT
+0010  72 6b 00 00 00 2e 00 ff 03 17 43 61 64 65 6e 63  rk........Cadenc
+0020  65 20 63 6f 6d 70 69 6c 65 72 20 6f 75 74 70 75  e compiler outpu
+0030  74 00 ff 51 03 07 a1 20 00 ff 58 04 04 02 18 08  t..Q... ..X.....
+0040  00 ff 2f 00 4d 54 72 6b 00 00 00 92 00 ff 03 04  ../.MTrk........
+0050  6c 65 61 64 00 c1 00 00 91 3e 60 81 70 81 3e 00  lead.....&gt;`.p.&gt;.
+0060  00 91 41 60 81 70 81 41 00 00 91 45 60 81 70 81  ..A`.p.A...E`.p.
+0070  45 00 00 91 3e 60 00 91 41 60 00 91 45 60 83 60  E...&gt;`..A`..E`.`
+0080  81 45 00 00 81 41 00 00 81 3e 00 00 91 3e 60 81  .E...A...&gt;...&gt;`.
+0090  70 81 3e 00 00 91 41 60 81 70 81 41 00 00 91 45  p.&gt;...A`.p.A...E
+00a0  60 81 70 81 45 00 00 91 3e 60 00 91 41 60 00 91  `.p.E...&gt;`..A`..
+00b0  45 60 83 60 81 45 00 00 81 41 00 00 81 3e 00 00  E`.`.E...A...&gt;..
+00c0  91 45 60 81 70 81 45 00 00 91 41 60 81 70 81 41  .E`.p.E...A`.p.A
+00d0  00 00 91 3e 60 83 60 81 3e 00 00 ff 2f 00 4d 54  ...&gt;`.`.&gt;.../.MT
+00e0  72 6b 00 00 00 76 00 ff 03 03 6c 6f 77 00 c0 21  rk...v....low..!
+00f0  00 90 32 60 81 70 80 32 00 00 90 35 60 81 70 80  ..2`.p.2...5`.p.</pre>
+<h3>Timed event stream produced by the virtual machine</h3>
+<table><tr><th>tick</th><th>voice</th><th>event</th><th>pitch</th><th>velocity</th><th>came from</th></tr><tr><td>0</td><td>lead</td><td>note on</td><td>62</td><td>96</td><td>D4</td></tr><tr><td>0</td><td>low</td><td>note on</td><td>50</td><td>96</td><td>D4</td></tr><tr><td>240</td><td>lead</td><td>note off</td><td>62</td><td>0</td><td>D4</td></tr><tr><td>240</td><td>lead</td><td>note on</td><td>65</td><td>96</td><td>F4</td></tr><tr><td>240</td><td>low</td><td>note off</td><td>50</td><td>0</td><td>D4</td></tr><tr><td>240</td><td>low</td><td>note on</td><td>53</td><td>96</td><td>F4</td></tr><tr><td>480</td><td>lead</td><td>note off</td><td>65</td><td>0</td><td>F4</td></tr><tr><td>480</td><td>lead</td><td>note on</td><td>69</td><td>96</td><td>A4</td></tr><tr><td>480</td><td>low</td><td>note off</td><td>53</td><td>0</td><td>F4</td></tr><tr><td>480</td><td>low</td><td>note on</td><td>57</td><td>96</td><td>A4</td></tr><tr><td>720</td><td>lead</td><td>note off</td><td>69</td><td>0</td><td>A4</td></tr><tr><td>720</td><td>lead</td><td>note on</td><td>62</td><td>96</td><td>chord of 3</td></tr><tr><td>720</td><td>lead</td><td>note on</td><td>65</td><td>96</td><td>chord of 3</td></tr><tr><td>720</td><td>lead</td><td>note on</td><td>69</td><td>96</td><td>chord of 3</td></tr><tr><td>720</td><td>low</td><td>note off</td><td>57</td><td>0</td><td>A4</td></tr><tr><td>720</td><td>low</td><td>note on</td><td>50</td><td>96</td><td>chord of 3</td></tr><tr><td>720</td><td>low</td><td>note on</td><td>53</td><td>96</td><td>chord of 3</td></tr><tr><td>720</td><td>low</td><td>note on</td><td>57</td><td>96</td><td>chord of 3</td></tr><tr><td>1200</td><td>lead</td><td>note off</td><td>69</td><td>0</td><td>chord of 3</td></tr><tr><td>1200</td><td>lead</td><td>note off</td><td>65</td><td>0</td><td>chord of 3</td></tr><tr><td>1200</td><td>lead</td><td>note off</td><td>62</td><td>0</td><td>chord of 3</td></tr><tr><td>1200</td><td>lead</td><td>note on</td><td>62</td><td>96</td><td>D4</td></tr><tr><td>1200</td><td>low</td><td>note off</td><td>57</td><td>0</td><td>chord of 3</td></tr><tr><td>1200</td><td>low</td><td>note off</td><td>53</td><td>0</td><td>chord of 3</td></tr><tr><td>1200</td><td>low</td><td>note off</td><td>50</td><td>0</td><td>chord of 3</td></tr><tr><td>1200</td><td>low</td><td>note on</td><td>50</td><td>96</td><td>D4</td></tr><tr><td>1440</td><td>lead</td><td>note off</td><td>62</td><td>0</td><td>D4</td></tr><tr><td>1440</td><td>lead</td><td>note on</td><td>65</td><td>96</td><td>F4</td></tr><tr><td>1440</td><td>low</td><td>note off</td><td>50</td><td>0</td><td>D4</td></tr><tr><td>1440</td><td>low</td><td>note on</td><td>53</td><td>96</td><td>F4</td></tr><tr><td>1680</td><td>lead</td><td>note off</td><td>65</td><td>0</td><td>F4</td></tr><tr><td>1680</td><td>lead</td><td>note on</td><td>69</td><td>96</td><td>A4</td></tr><tr><td>1680</td><td>low</td><td>note off</td><td>53</td><td>0</td><td>F4</td></tr><tr><td>1680</td><td>low</td><td>note on</td><td>57</td><td>96</td><td>A4</td></tr><tr><td>1920</td><td>lead</td><td>note off</td><td>69</td><td>0</td><td>A4</td></tr><tr><td>1920</td><td>lead</td><td>note on</td><td>62</td><td>96</td><td>chord of 3</td></tr><tr><td>1920</td><td>lead</td><td>note on</td><td>65</td><td>96</td><td>chord of 3</td></tr><tr><td>1920</td><td>lead</td><td>note on</td><td>69</td><td>96</td><td>chord of 3</td></tr><tr><td>1920</td><td>low</td><td>note off</td><td>57</td><td>0</td><td>A4</td></tr><tr><td>1920</td><td>low</td><td>note on</td><td>50</td><td>96</td><td>chord of 3</td></tr><tr><td>1920</td><td>low</td><td>note on</td><td>53</td><td>96</td><td>chord of 3</td></tr><tr><td>1920</td><td>low</td><td>note on</td><td>57</td><td>96</td><td>chord of 3</td></tr><tr><td>2400</td><td>lead</td><td>note off</td><td>69</td><td>0</td><td>chord of 3</td></tr><tr><td>2400</td><td>lead</td><td>note off</td><td>65</td><td>0</td><td>chord of 3</td></tr><tr><td>2400</td><td>lead</td><td>note off</td><td>62</td><td>0</td><td>chord of 3</td></tr><tr><td>2400</td><td>lead</td><td>note on</td><td>69</td><td>96</td><td>degree ^5</td></tr><tr><td>2400</td><td>low</td><td>note off</td><td>57</td><td>0</td><td>chord of 3</td></tr><tr><td>2400</td><td>low</td><td>note off</td><td>53</td><td>0</td><td>chord of 3</td></tr><tr><td>2400</td><td>low</td><td>note off</td><td>50</td><td>0</td><td>chord of 3</td></tr><tr><td>2640</td><td>lead</td><td>note off</td><td>69</td><td>0</td><td>degree ^5</td></tr><tr><td>2640</td><td>lead</td><td>note on</td><td>65</td><td>96</td><td>degree ^3</td></tr><tr><td>2880</td><td>lead</td><td>note off</td><td>65</td><td>0</td><td>degree ^3</td></tr><tr><td>2880</td><td>lead</td><td>note on</td><td>62</td><td>96</td><td>degree ^1</td></tr><tr><td>3360</td><td>lead</td><td>note off</td><td>62</td><td>0</td><td>degree ^1</td></tr></table></section><section id='metrics'>
+<h2>Every number this compiler measured</h2>
+<p class='lead'>A demo shows that something runs.  A table of numbers shows that it was
+evaluated.  This whole table is generated, so it can never drift out of date.</p>
+<table><tr><th>phase</th><th>measurement</th><th>value</th></tr><tr><td>lexer</td><td>token rules</td><td>25</td></tr><tr><td>lexer</td><td>regex positions</td><td>101</td></tr><tr><td>lexer</td><td>character classes</td><td>37</td></tr><tr><td>lexer</td><td>DFA states (direct method)</td><td>47</td></tr><tr><td>lexer</td><td>DFA states (minimised)</td><td>47</td></tr><tr><td>lexer</td><td>tokens scanned</td><td>93</td></tr><tr><td>parser</td><td>SLR(1) states</td><td>114</td></tr><tr><td>parser</td><td>SLR(1) entries</td><td>742</td></tr><tr><td>parser</td><td>CLR(1) states</td><td>204</td></tr><tr><td>parser</td><td>CLR(1) entries</td><td>1343</td></tr><tr><td>parser</td><td>LALR(1) states</td><td>114</td></tr><tr><td>parser</td><td>LALR(1) entries</td><td>742</td></tr><tr><td>parser</td><td>conflicts</td><td>0</td></tr><tr><td>parser</td><td>shifts</td><td>93</td></tr><tr><td>parser</td><td>reductions</td><td>109</td></tr><tr><td>parser</td><td>recursive-descent agrees</td><td>True</td></tr><tr><td>semantics</td><td>tempo</td><td>120</td></tr><tr><td>semantics</td><td>key</td><td>D minor</td></tr><tr><td>semantics</td><td>default_duration</td><td>1/8</td></tr><tr><td>semantics</td><td>velocity</td><td>96</td></tr><tr><td>semantics</td><td>phrases</td><td>2</td></tr><tr><td>semantics</td><td>voices</td><td>2</td></tr><tr><td>semantics</td><td>instruments</td><td>2</td></tr><tr><td>semantics</td><td>symbols</td><td>7</td></tr><tr><td>semantics</td><td>warnings</td><td>0</td></tr><tr><td>ir</td><td>procedures (naive)</td><td>5</td></tr><tr><td>ir</td><td>static instructions (naive)</td><td>83</td></tr><tr><td>ir</td><td>procedures (optimised)</td><td>3</td></tr><tr><td>ir</td><td>static instructions (optimised)</td><td>86</td></tr><tr><td>ir</td><td>static change</td><td>+3.6%</td></tr><tr><td>runtime</td><td>instructions EXECUTED (naive)</td><td>201</td></tr><tr><td>runtime</td><td>instructions EXECUTED (optimised)</td><td>82</td></tr><tr><td>runtime</td><td>work saved</td><td>59.2%</td></tr><tr><td>runtime</td><td>deepest activation-record stack</td><td>2</td></tr><tr><td>runtime</td><td>note events</td><td>27</td></tr><tr><td>runtime</td><td>length (ticks)</td><td>3600</td></tr><tr><td>runtime</td><td>length (seconds)</td><td>3.75</td></tr><tr><td>runtime</td><td>optimiser preserved the music</td><td>True</td></tr><tr><td>backend</td><td>voices</td><td>2</td></tr><tr><td>backend</td><td>channels used</td><td>2</td></tr><tr><td>backend</td><td>channel spills</td><td>0</td></tr><tr><td>backend</td><td>MIDI file size (bytes)</td><td>348</td></tr></table></section></main>
+<script>
+function show(id){
+  document.querySelectorAll('section').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('nav a').forEach(a=>a.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  document.querySelector('[data-t="'+id+'"]').classList.add('on');
+  window.scrollTo(0,0);
+}
+window.addEventListener('DOMContentLoaded',()=>show('overview'));
+</script></body></html>

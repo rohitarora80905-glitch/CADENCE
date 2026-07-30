@@ -1,0 +1,23 @@
+// Why this compiler needs INHERITED attributes.
+//
+// ^1 ^2 ^3 ... are scale degrees.  They are not pitches yet: a degree only
+// becomes a MIDI number once the enclosing key, mode and octave have been
+// handed DOWN the syntax tree to it.  Change one word below (minor -> major)
+// and every note in the file changes, without a single note being edited.
+//
+//   ^5    fifth degree of the current key
+//   ^5'   the same degree, one octave up      (apostrophe = up)
+//   ^5,   the same degree, one octave down    (comma = down)
+
+tempo 120 ;
+key A minor ;                 // <-- change to  key A major ;  and listen again
+duration 8 ;                  // notes with no length written are eighth notes
+velocity 88 ;
+instrument piano = "acoustic grand piano" ;
+
+phrase up   = [ ^1 ^2 ^3 ^4 ^5 ^6 ^7 ^1' ] ;
+phrase down = [ ^1' ^7 ^6 ^5 ^4 ^3 ^2 ^1/4 ] ;
+
+voice scale on piano = up down ;
+
+play scale ;

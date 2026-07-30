@@ -1,0 +1,19 @@
+// Phrases with parameters, chords, repetition and transposition.
+// This is the program used in the report and the slides.
+
+tempo 120 ;
+key D minor ;
+duration 8 ;
+velocity 96 ;
+
+instrument piano = "grand piano" ;
+instrument bass  = "electric bass" ;
+
+// A phrase is a procedure.  Calling it pushes a real activation record.
+phrase riff(t) = transpose t of [ D4 F4 A4 <D4 F4 A4>/4 ] ;
+phrase tail    = [ ^5 ^3 ^1/4 r/8 ] ;
+
+voice lead on piano = repeat 2 of riff(0) tail ;
+voice low  on bass  = transpose -12 of [ repeat 2 of riff(0) ] ;
+
+play lead | low ;             // '|' means "at the same time"

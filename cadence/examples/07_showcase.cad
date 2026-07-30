@@ -1,0 +1,34 @@
+// The demonstration program: every feature of the language, and every
+// optimisation in the compiler, in twenty lines.
+//
+//   repeat n of X      loop      -> backpatching, then unrolling
+//   transpose n of X   shift     -> constant folding once n is known
+//   slow n of X        stretch   -> the same, on note lengths
+//   fast n of X        stretch
+//   <A B C>/4          chord     -> several NOTEONs, one DELAY
+//   ^5  ^5'  ^5,       degree    -> needs the inherited key
+//   r/8   ~/8          rest      -> DELAY with no note
+//   phrase f(x)        procedure -> activation record, then inlined
+//   a | b              parallel  -> separate tracks, channel allocation
+
+tempo 100 ;
+key E minor ;
+duration 8 ;
+velocity 92 ;
+
+instrument lead  = "electric guitar (clean)" ;
+instrument pad   = "pad 2 (warm)" ;
+instrument bass  = "fretless bass" ;
+instrument kit   = drums ;
+
+phrase motif(shift, len) = transpose shift of [ ^1 ^3 ^5 ^7/4 ] ;
+phrase answer          = [ ^5' ^4 ^3 ^2 ^1/2 ] ;
+phrase pedal           = slow 4 of [ ^1, ^1, ] ;
+phrase beat            = [ <C2 F#2>/8 F#2 D2 F#2 ] ;
+
+voice melody on lead = repeat 2 of [ motif(0, 8) answer ] fast 2 of answer ;
+voice chords on pad  = repeat 2 of [ <E3 G3 B3>/1 <C3 E3 G3>/1 ] ;
+voice under  on bass = transpose -12 of repeat 4 of pedal ;
+voice groove on kit  = repeat 8 of beat ;
+
+play melody | chords | under | groove ;

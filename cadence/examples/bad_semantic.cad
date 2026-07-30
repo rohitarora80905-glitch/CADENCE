@@ -1,0 +1,22 @@
+// DELIBERATELY BROKEN -- module 3.
+// Every error here is well-formed English as far as the grammar is
+// concerned; only the semantic analyser can catch them.
+//
+//   1. 'plano' was never declared        (undeclared name)
+//   2. riff takes 1 argument, given 2    (wrong arity)
+//   3. loop calls itself                 (recursive phrase - cycle in the call graph)
+//   4. "grand pianoo" is not a GM name   (unknown instrument, suggests the closest)
+//   5. tempo 900 is out of range         (range check)
+//   6. transpose 90 pushes C8 past 127   (pitch out of range)
+
+tempo 900 ;
+key C major ;
+instrument piano = "grand pianoo" ;
+
+phrase riff(t) = transpose t of [ C4 E4 ] ;
+phrase loop    = [ C4 loop ] ;
+
+voice tune on plano = riff(1, 2) ;
+voice high on piano = transpose 90 of [ C8 ] ;
+
+play tune | high ;

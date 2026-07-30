@@ -1,0 +1,11 @@
+// DELIBERATELY BROKEN -- module 2.
+// A missing semicolon and a missing closing bracket.  The LALR parser
+// reports the error with the set of tokens that WOULD have been legal in
+// that state (read straight out of the parse table), then recovers to the
+// next ';' so that later errors are still found.
+
+tempo 120
+key C major ;
+instrument piano = "grand piano" ;
+voice tune on piano = [ C4 E4 G4 ;
+play tune ;

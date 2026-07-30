@@ -1,0 +1,9 @@
+// The smallest Cadence program that makes a sound.
+// Everything else in this folder is this, with more ideas added.
+
+tempo 96 ;                       // beats per minute
+instrument piano = "grand piano" ;   // looked up in the General MIDI name table
+
+voice tune on piano = [ C4 E4 G4 C5/2 ] ;
+
+play tune ;

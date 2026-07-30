@@ -1,0 +1,20 @@
+// Percussion is the reason channel allocation is not trivial.
+// General MIDI reserves channel 10 for drums, so that voice is
+// PRE-COLOURED before graph colouring starts -- exactly how a register
+// allocator handles a value that must live in one specific register.
+
+tempo 132 ;
+duration 8 ;
+velocity 100 ;
+
+instrument kit  = drums ;
+instrument bass = "slap bass 1" ;
+
+// on a drum kit the pitch selects the instrument, not the note:
+//   C2 = kick,  D2 = snare,  F#2 = closed hi-hat
+phrase beat = [ <C2 F#2>/8 F#2 <D2 F#2>/8 F#2 ] ;
+
+voice groove on kit  = repeat 4 of beat ;
+voice line   on bass = repeat 2 of [ G2 G2 Bb2 C3 D3/4 r/8 ] ;
+
+play groove | line ;
