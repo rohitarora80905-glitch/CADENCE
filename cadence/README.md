@@ -71,6 +71,9 @@ For the composer, set `GROQ_API_KEY` in the environment or paste a key into the
 Composer panel (it stays in your browser's localStorage and is only ever sent to
 your own Studio server). Without a key, everything else works.
 
+A two-page how-to lives in `docs/Cadence_Studio_How_To_Use.pdf` (Markdown source
+alongside it).
+
 ```
 studio/
     server.py         the FastAPI application: the page at /, the API under /api
