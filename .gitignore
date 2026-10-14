@@ -1,0 +1,8 @@
+# Python bytecode
+__pycache__/
+*.pyc
+
+# files the tools write next to themselves
+cadence/cadence_report.html
+cadence/report.html
+cadence/_cadence_preview.mid

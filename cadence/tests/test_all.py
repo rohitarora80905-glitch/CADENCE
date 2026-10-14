@@ -22,6 +22,7 @@ The tests are grouped by the module of the syllabus they defend:
 
 import os
 import sys
+import tempfile
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,6 +38,7 @@ from cadence.verify import verify                                      # noqa: E
 from cadence.vm import VM, event_signature                             # noqa: E402
 
 EX = os.path.join(ROOT, "examples")
+TMP = tempfile.gettempdir()
 
 
 def read(name):
@@ -600,17 +602,18 @@ class TestMidiBytes(unittest.TestCase):
                                  r.metrics["runtime"]["note events"])
 
     def test_output_is_deterministic(self):
-        a = compile_source(read("03_riff.cad"), "a", out_midi="/tmp/_a.mid")
-        b = compile_source(read("03_riff.cad"), "b", out_midi="/tmp/_b.mid")
-        with open("/tmp/_a.mid", "rb") as f1, open("/tmp/_b.mid", "rb") as f2:
+        a = compile_source(read("03_riff.cad"), "a", out_midi=os.path.join(TMP, "_a.mid"))
+        b = compile_source(read("03_riff.cad"), "b", out_midi=os.path.join(TMP, "_b.mid"))
+        with open(os.path.join(TMP, "_a.mid"), "rb") as f1, \
+                open(os.path.join(TMP, "_b.mid"), "rb") as f2:
             self.assertEqual(f1.read(), f2.read(),
                              "the same source must always give the same bytes")
 
     def test_tempo_reaches_the_file(self):
         r = compile_source("tempo 60 ; instrument p = 0 ;\n"
                            "voice v on p = [ C4/4 ] ; play v ;", "t60",
-                           out_midi="/tmp/_t.mid")
-        with open("/tmp/_t.mid", "rb") as f:
+                           out_midi=os.path.join(TMP, "_t.mid"))
+        with open(os.path.join(TMP, "_t.mid"), "rb") as f:
             data = f.read()
         self.assertIn(b"\xff\x51\x03", data, "no tempo meta event was written")
         # 60 bpm = 1 000 000 microseconds per quarter note

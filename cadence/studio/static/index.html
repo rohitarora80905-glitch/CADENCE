@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadence Studio</title>
+<meta name="description" content="A piano-centric workstation for the Cadence music compiler: compose, hear, and look inside every phase of the compiler.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b0d11'/%3E%3Crect x='6' y='7' width='4' height='18' rx='1' fill='%23efebe1'/%3E%3Crect x='12' y='7' width='4' height='18' rx='1' fill='%23efebe1'/%3E%3Crect x='18' y='7' width='4' height='18' rx='1' fill='%23efebe1'/%3E%3Crect x='24' y='7' width='3' height='18' rx='1' fill='%23efebe1'/%3E%3Crect x='9' y='7' width='3' height='11' fill='%23c9a961'/%3E%3Crect x='15' y='7' width='3' height='11' fill='%23c9a961'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/studio.css">
+</head>
+<body>
+
+<!-- ============================================================ boot curtain -->
+<div id="boot" class="boot" aria-hidden="true">
+  <div class="boot-mark">
+    <div class="boot-keys"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="boot-word">Cadence</div>
+    <div class="boot-sub">Studio</div>
+  </div>
+</div>
+
+<!-- ============================================================ top bar -->
+<header class="topbar" id="topbar">
+  <div class="brand" title="Cadence — a music DSL that compiles to MIDI">
+    <span class="brand-keys"><i></i><i></i><i></i><i></i></span>
+    <span class="brand-name">Cadence</span>
+    <span class="brand-sub">Studio</span>
+  </div>
+
+  <nav class="views" aria-label="Views">
+    <button class="view-btn on" data-view="studio">Studio</button>
+    <button class="view-btn" data-view="glass">Glass Box</button>
+    <button class="view-btn" data-view="core">The Core</button>
+    <span class="view-ink" id="view-ink"></span>
+  </nav>
+
+  <div class="transport" id="transport">
+    <button class="tbtn" id="btn-play" title="Play / pause  (Enter)">
+      <svg viewBox="0 0 24 24" class="ico-play"><path d="M7 5v14l12-7z"/></svg>
+      <svg viewBox="0 0 24 24" class="ico-pause"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
+    </button>
+    <button class="tbtn" id="btn-stop" title="Stop  (Esc)"><svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg></button>
+    <button class="tbtn toggle" id="btn-loop" title="Loop"><svg viewBox="0 0 24 24"><path d="M17 7H7a4 4 0 0 0 0 8h1v2H7a6 6 0 0 1 0-12h10V3l4 3.5L17 10V7zm-10 10h10a4 4 0 0 0 0-8h-1V7h1a6 6 0 0 1 0 12H7v2l-4-3.5L7 14v3z"/></svg></button>
+    <div class="readout">
+      <span class="ro" id="ro-time">0:00.0</span>
+      <span class="ro-sep"></span>
+      <span class="ro" id="ro-tempo">— bpm</span>
+      <span class="ro-sep"></span>
+      <span class="ro" id="ro-key">—</span>
+    </div>
+  </div>
+
+  <div class="top-right">
+    <div class="status" id="status">
+      <span class="dot" id="dot-server"></span><span class="status-label">server</span>
+      <span class="dot" id="dot-ai"></span><span class="status-label">AI</span>
+    </div>
+    <button class="btn gold" id="btn-compile" title="Compile  (Ctrl+Enter)">Compile<kbd>⌃↵</kbd></button>
+    <div class="menu" id="export-menu">
+      <button class="btn" id="btn-export">Export <span class="caret">▾</span></button>
+      <div class="menu-list">
+        <button data-export="midi">Download .mid</button>
+        <button data-export="cad">Download .cad</button>
+        <button data-export="copy">Copy source</button>
+        <div class="menu-sep"></div>
+        <button data-export="json">Download compile result (.json)</button>
+        <button data-export="api">Open the API docs</button>
+      </div>
+    </div>
+    <button class="ibtn" id="btn-theme" title="Ivory / ebony theme">
+      <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18V3z"/><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+    </button>
+    <button class="ibtn" id="btn-help" title="Keyboard shortcuts"><span class="qm">?</span></button>
+  </div>
+</header>
+
+<!-- the pipeline strip: one light per compiler stage -->
+<div class="pipeline" id="pipeline" aria-label="Compiler pipeline"></div>
+
+<!-- ============================================================ views -->
+<main id="main">
+
+  <!-- ------------------------------------------------------ STUDIO -->
+  <section class="view on" id="view-studio">
+    <div class="workspace">
+
+      <aside class="panel score-panel" id="score-panel">
+        <header class="panel-head">
+          <div class="panel-title"><h2>Score</h2><span class="panel-sub" id="score-name">nocturne.cad</span></div>
+          <div class="panel-actions">
+            <button class="chip" id="btn-moods">Moods</button>
+            <button class="chip" id="btn-examples">Examples</button>
+            <label class="switch" title="Compile as you type"><input type="checkbox" id="chk-auto" checked><span>auto</span></label>
+          </div>
+        </header>
+        <div class="drawer" id="moods-drawer" hidden></div>
+        <div class="drawer" id="examples-drawer" hidden></div>
+        <div class="editor-host" id="editor"></div>
+        <div class="diagnostics" id="diagnostics"></div>
+      </aside>
+
+      <section class="panel stage-panel" id="stage-panel">
+        <header class="panel-head">
+          <div class="panel-title"><h2>Piano roll</h2><span class="panel-sub" id="roll-sub">compile to see the music</span></div>
+          <div class="metrics-strip" id="metrics"></div>
+        </header>
+        <div class="roll-host" id="roll"></div>
+        <div class="capture" id="capture"></div>
+      </section>
+
+      <aside class="panel assistant-panel" id="assistant"></aside>
+    </div>
+
+    <!-- the keyboard dock -->
+    <div class="dock" id="dock">
+      <div class="dock-bar" id="dock-bar"></div>
+      <div class="keyboard-host" id="keyboard"></div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------ GLASS BOX -->
+  <section class="view" id="view-glass">
+    <nav class="glass-nav" id="glass-nav"></nav>
+    <div class="glass-body" id="glass-body"></div>
+  </section>
+
+  <!-- ------------------------------------------------------ THE CORE -->
+  <section class="view" id="view-core">
+    <div class="core-body" id="core-body"></div>
+  </section>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div id="modal-root"></div>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

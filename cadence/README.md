@@ -34,12 +34,52 @@ python -m cadence examples/07_showcase.cad --report r.html      # + the full rep
 python -m cadence examples/03_riff.cad --dump all               # every phase, in the terminal
 python -m cadence --gui                                         # the Glass-Box window
 python -m cadence --all                                         # compile every example
-python -m unittest discover -s tests -v                         # 72 tests
+python -m unittest discover -s tests -v                         # 72 compiler tests + 25 Studio tests
 ```
 
 Requires Python 3.10 or newer. Nothing else. `pip install` is never needed.
 
 `build_all.bat` does the whole lot (examples, tests, report) and opens the report.
+
+---
+
+## Cadence Studio — the web front end
+
+A piano-centric workstation built on the compiler. An 88-key piano you can play
+with the mouse, touch or the computer keyboard (velocity follows where you click,
+Space is the sustain pedal); a highlighted score editor that compiles as you type
+and marks every diagnostic on its line; a piano roll that plays the compiled event
+stream through the browser's own audio engine while the keys light up; a capture
+strip that writes what you play as Cadence tokens — as notes or as scale degrees
+of the compiled key; ten mood presets for the piano family; a Groq-backed composer
+whose every suggestion is compiled before you see it (and sent back to the model
+with the diagnostics when it is not); and a Glass Box with one page per compiler
+phase, plus the project's own source code, readable in place.
+
+**Windows:** double-click **`run_studio.bat`**.
+
+**Anywhere:**
+
+```bash
+pip install -r requirements-studio.txt    # fastapi, uvicorn, groq -- the compiler itself still needs nothing
+python -m studio                           # http://127.0.0.1:8000
+uvicorn studio.server:app --reload         # the same server, for development
+python -m unittest tests.test_studio -v    # the Studio's own tests
+```
+
+For the composer, set `GROQ_API_KEY` in the environment or paste a key into the
+Composer panel (it stays in your browser's localStorage and is only ever sent to
+your own Studio server). Without a key, everything else works.
+
+```
+studio/
+    server.py         the FastAPI application: the page at /, the API under /api
+    serialize.py      every compiler artefact as JSON for the browser
+    ai.py             the Groq composer, with compiler-verified output
+    presets.py        ten mood presets for the piano family, compiled on demand
+    core_info.py      the module catalogue behind "The Core"
+    static/           the single-page Studio: index.html, css/, js/ (no build step)
+```
 
 ---
 
