@@ -71,6 +71,16 @@ For the composer, set `GROQ_API_KEY` in the environment or paste a key into the
 Composer panel (it stays in your browser's localStorage and is only ever sent to
 your own Studio server). Without a key, everything else works.
 
+**Full song** (the `Full song…` button) asks the model to reproduce a complete
+piece from the first bar to the last. There is no length or time limit: when the
+model's reply is cut off at its token ceiling the server asks it to continue,
+stitches the parts, compiles the result and sends the diagnostics back until the
+program compiles; progress streams to the browser while it works
+(`POST /api/ai/compose/stream`). `GROQ_MAX_TOKENS`, `GROQ_MAX_CONTINUATIONS` and
+`GROQ_TIMEOUT` tune the per-request ceiling, the number of parts and the request
+deadline. The piano roll zooms to 8–64 bars per screen and follows the playhead,
+so a long piece stays readable.
+
 A two-page how-to lives in `docs/Cadence_Studio_How_To_Use.pdf` (Markdown source
 alongside it). The full project report, on the BCSE307P template with screenshots
 of every phase, is `docs/Cadence_Project_Report_Team9.pdf` (Word source alongside).

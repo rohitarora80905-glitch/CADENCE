@@ -28,7 +28,7 @@ The language fits in a few lines: `tempo 96 ;` and `key E minor ;` set the piece
 
 ## Hear it
 
-Press **Enter** or the gold button to play, **Esc** or the square to stop, and the loop button to repeat. Click anywhere on the piano roll to jump there. The keys light up in each voice's colour while it plays.
+Press **Enter** or the gold button to play, **Esc** or the square to stop, and the loop button to repeat. Click anywhere on the piano roll to jump there; the zoom box above it shows the whole piece or 8 to 64 bars at a time. The keys light up in each voice's colour while it plays.
 
 If you edit while it plays, a *new version ready* chip appears on the roll; stop, or click the chip, to switch to it.
 
@@ -55,6 +55,8 @@ Click **Key** in the Composer panel and paste a Groq API key from https://consol
 Then use the buttons: **Continue** adds what comes next, **Harmonise** adds a left hand, **Vary** writes a variation, **Mood...** recolours the piece to a mood you describe, **Explain** describes the piece in words, **Fix** repairs compile errors. Or type any request in the box.
 
 Every proposal is compiled before you see it: a green badge means it compiles, a red one lists the errors. **Replace score** takes it, **Audition** plays it without touching your score, **Insert at cursor** adds it where you are.
+
+**Full song...** reproduces a complete piece you name, from the first bar to the last, with no limit on length: a long piece arrives in several parts, each stitched on and compiled, and the panel shows the progress while it works. Use the roll's zoom (8 to 64 bars per screen) to read it; the roll scrolls to follow the playhead.
 
 ## Look inside the compiler
 

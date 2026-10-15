@@ -31,4 +31,38 @@ export const api = {
   readme: () => request('GET', '/api/core/readme'),
   aiModels: (key) => request('GET', '/api/ai/models', null, key ? { 'X-Groq-Key': key } : {}),
   aiCompose: (payload, key) => request('POST', '/api/ai/compose', payload, key ? { 'X-Groq-Key': key } : {}),
+  /* The streaming variant: progress lines arrive while the model works, with no time
+     limit on the browser side; resolves with the final result. */
+  aiComposeStream: async (payload, key, onProgress) => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (key) headers['X-Groq-Key'] = key;
+    const res = await fetch('/api/ai/compose/stream', { method: 'POST', headers, body: JSON.stringify(payload) });
+    if (!res.ok || !res.body) {
+      const data = await res.json().catch(() => ({}));
+      const err = new Error(data.message || data.detail || res.statusText || 'request failed');
+      err.status = res.status;
+      throw err;
+    }
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let result = null;
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim();
+        buf = buf.slice(i + 1);
+        if (!line) continue;
+        const msg = JSON.parse(line);
+        if (msg.event === 'progress') onProgress && onProgress(msg.message);
+        else if (msg.event === 'result') result = msg;
+        else if (msg.event === 'error') { const err = new Error(msg.message); err.status = msg.status; throw err; }
+      }
+    }
+    if (!result) throw new Error('the composer stream ended without a result');
+    return result;
+  },
 };

@@ -336,7 +336,9 @@ code, pre { font-family: var(--font-mono); }
 .metric b { color: var(--ink); font-weight: 500; }
 .metric.good b { color: var(--ok); }
 .roll-host { position: relative; flex: 1; min-height: 160px; background: var(--bg-3); overflow: hidden; }
-.roll-host canvas { position: absolute; inset: 0; display: block; cursor: crosshair; }
+.roll-scroll { position: absolute; inset: 0; overflow-x: auto; overflow-y: hidden; }
+.roll-scroll canvas { display: block; height: 100%; cursor: crosshair; }
+.roll-zoom { padding: 3px 7px; margin-right: 10px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-2); font: 11px var(--font-mono); }
 .roll-tip { position: absolute; pointer-events: none; padding: 5px 9px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 7px; font: 11px var(--font-mono); color: var(--ink-2); box-shadow: var(--shadow-sm); opacity: 0; transition: opacity 0.15s; white-space: nowrap; z-index: 3; }
 .roll-tip.on { opacity: 1; }
 .roll-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-4); font: 500 15px var(--font-display); letter-spacing: 0.04em; pointer-events: none; }

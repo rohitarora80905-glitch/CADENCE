@@ -1,20 +1,25 @@
-/* The piano roll: a canvas that draws the compiler's paired note list, the
-   bar grid, a gliding playhead and the notes currently sounding. */
+/* The piano roll: a canvas that draws the compiler's paired note list, the bar grid,
+   a gliding playhead and the notes currently sounding.  It can zoom to a number of
+   bars per screen and scrolls to follow the playhead, so a full-length piece stays
+   readable. */
 
 import { TPQ, isBlack, nameOf } from './theory.js';
 import { el, prefersReducedMotion } from './ui.js';
 
 const PAD_L = 46, PAD_R = 14, PAD_T = 14, PAD_B = 24;
+const BAR = TPQ * 4;
 
 export class PianoRoll {
   constructor(host, { onSeek = null } = {}) {
     this.host = host;
     this.onSeek = onSeek;
+    this.scroller = el('div.roll-scroll');
     this.canvas = el('canvas');
+    this.scroller.appendChild(this.canvas);
     this.tip = el('div.roll-tip');
     this.empty = el('div.roll-empty', { text: 'compile to see the music' });
     this.badge = el('div.roll-badge');
-    host.appendChild(this.canvas); host.appendChild(this.tip); host.appendChild(this.empty); host.appendChild(this.badge);
+    host.append(this.scroller, this.tip, this.empty, this.badge);
     this.ctx = this.canvas.getContext('2d');
     this.notes = []; this.total = 1; this.bpm = 120;
     this.voiceIndex = new Map();
@@ -24,6 +29,7 @@ export class PianoRoll {
     this.animStart = 0;
     this.colours = [];
     this.hover = null;
+    this.zoom = 'fit';               // 'fit' or bars per screen
     this.refreshTheme();
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
@@ -33,9 +39,10 @@ export class PianoRoll {
       if (!this.onSeek || !this.notes.length) return;
       const r = this.canvas.getBoundingClientRect();
       const x = e.clientX - r.left;
-      const t = ((x - PAD_L) / (r.width - PAD_L - PAD_R)) * this.total;
+      const t = ((x - PAD_L) / (this.w - PAD_L - PAD_R)) * this.total;
       this.onSeek(Math.max(0, Math.min(this.total, t)));
     });
+    this.scroller.addEventListener('scroll', () => { this.tip.classList.remove('on'); });
     this.resize();
   }
 
@@ -56,6 +63,8 @@ export class PianoRoll {
     return this.colours[i % this.colours.length];
   }
 
+  get bars() { return Math.max(1, this.total / BAR); }
+
   setData({ notes = [], totalTicks = 0, bpm = 120, voices = [] } = {}) {
     this.notes = notes;
     this.total = Math.max(1, totalTicks);
@@ -69,17 +78,26 @@ export class PianoRoll {
     }
     this.active.clear();
     this.playTicks = 0;
+    this.scroller.scrollLeft = 0;
     this.empty.style.display = notes.length ? 'none' : '';
     this.animStart = prefersReducedMotion() ? 0 : performance.now();
-    this.draw();
+    this.resize();
     if (this.animStart) {
       const loop = () => { this.draw(); if (performance.now() - this.animStart < 650) requestAnimationFrame(loop); };
       requestAnimationFrame(loop);
     }
   }
 
+  /** 'fit' draws the whole piece in the panel; a number is bars per screen width. */
+  setZoom(zoom) {
+    this.zoom = zoom;
+    this.resize();
+    this.follow(true);
+  }
+
   setPlayheadSeconds(sec) {
     this.playTicks = (sec / 60) * this.bpm * TPQ;
+    this.follow();
     this.draw();
   }
   setActive(note, on) {
@@ -87,10 +105,21 @@ export class PianoRoll {
   }
   setBadge(node) { this.badge.innerHTML = ''; if (node) this.badge.appendChild(node); }
 
+  /* keep the playhead in view while the piece scrolls past */
+  follow(force = false) {
+    if (this.w <= this.vw + 1) return;
+    const x = this.x(Math.min(this.playTicks, this.total));
+    const left = this.scroller.scrollLeft;
+    if (force || x > left + this.vw * 0.85 || x < left + PAD_L) {
+      this.scroller.scrollLeft = Math.max(0, x - this.vw * 0.25);
+    }
+  }
+
   resize() {
     const r = this.host.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    this.w = Math.max(10, r.width); this.h = Math.max(10, r.height);
+    this.vw = Math.max(10, r.width); this.h = Math.max(10, r.height);
+    this.w = this.zoom === 'fit' ? this.vw : Math.max(this.vw, (this.vw - PAD_L - PAD_R) * (this.bars / this.zoom) + PAD_L + PAD_R);
     this.canvas.width = Math.round(this.w * dpr); this.canvas.height = Math.round(this.h * dpr);
     this.canvas.style.width = this.w + 'px'; this.canvas.style.height = this.h + 'px';
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -119,18 +148,19 @@ export class PianoRoll {
         c.fillText(nameOf(p), PAD_L - 8, y + rh / 2);
       }
     }
-    // bars and beats
-    const bar = TPQ * 4;
-    const barPx = this.x(bar) - this.x(0);
+    // bars and beats; thin the labels out when bars get narrow
+    const barPx = this.x(BAR) - this.x(0);
+    const labelEvery = barPx >= 26 ? 1 : barPx >= 13 ? 2 : barPx >= 7 ? 4 : barPx >= 3.5 ? 8 : 16;
     for (let t = 0; t <= this.total + 1; t += TPQ) {
-      const x = this.x(t);
-      const isBar = t % bar === 0;
+      const isBar = t % BAR === 0;
       if (!isBar && barPx < 48) continue;
+      if (isBar && barPx < 3.5 && (t / BAR) % labelEvery !== 0) continue;
+      const x = this.x(t);
       c.strokeStyle = isBar ? th.line2 : th.line; c.lineWidth = 1;
       c.beginPath(); c.moveTo(x, PAD_T); c.lineTo(x, H - PAD_B); c.stroke();
-      if (isBar && barPx > 26) {
+      if (isBar && (t / BAR) % labelEvery === 0) {
         c.fillStyle = th.ink4; c.font = '10px "JetBrains Mono", Consolas, monospace'; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
-        c.fillText(String(t / bar + 1), x + 4, H - 8);
+        c.fillText(String(t / BAR + 1), x + 4, H - 8);
       }
     }
     // notes
@@ -185,7 +215,8 @@ export class PianoRoll {
     const n = this.notes[found];
     const beat = n.start / TPQ;
     this.tip.textContent = `${nameOf(n.pitch)} · ${n.voice} · bar ${Math.floor(beat / 4) + 1}, beat ${(beat % 4 + 1).toFixed(2)} · ${((n.end - n.start) / TPQ).toFixed(2)} beats · vel ${n.velocity}${n.label ? ' · ' + n.label : ''}`;
-    this.tip.style.left = Math.min(mx + 14, this.w - 260) + 'px';
+    const vx = mx - this.scroller.scrollLeft;           // the tip lives outside the scroller
+    this.tip.style.left = Math.min(vx + 14, this.vw - 260) + 'px';
     this.tip.style.top = Math.max(4, my - 30) + 'px';
     this.tip.classList.add('on');
   }

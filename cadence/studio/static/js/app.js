@@ -124,6 +124,12 @@ function buildComponents() {
 
   roll = new PianoRoll($('#roll'), { onSeek: (ticks) => { if (state.result && state.result.settings) player.seek((ticks / 480) * (60 / state.result.settings.tempo)); } });
   rollSub = $('#roll-sub');
+  // zoom: the whole piece, or a number of bars per screen (long songs scroll and follow the playhead)
+  const zoomSel = el('select.roll-zoom', { title: 'bars per screen' },
+    el('option', { value: 'fit', text: 'fit' }), el('option', { value: '8', text: '8 bars' }), el('option', { value: '16', text: '16 bars' }),
+    el('option', { value: '32', text: '32 bars' }), el('option', { value: '64', text: '64 bars' }));
+  zoomSel.addEventListener('change', () => roll.setZoom(zoomSel.value === 'fit' ? 'fit' : parseInt(zoomSel.value, 10)));
+  $('#metrics').parentNode.insertBefore(zoomSel, $('#metrics'));
 
   capture = createCapture($('#capture'), {
     editor,

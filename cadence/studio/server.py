@@ -20,13 +20,16 @@ Routes
 
 from __future__ import annotations
 
+import json
 import os
+import queue
+import threading
 import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -41,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 STATIC = os.path.join(HERE, "static")
 EXAMPLES = os.path.join(ROOT, "examples")
-MAX_SOURCE = 64_000
+MAX_SOURCE = 1_000_000          # a full-length piece is tens of kilobytes; leave room
 
 
 @asynccontextmanager
@@ -70,11 +73,11 @@ class CompileRequest(BaseModel):
 
 class ComposeRequest(BaseModel):
     action: str = Field("chat", max_length=24)
-    prompt: str = Field("", max_length=4000)
+    prompt: str = Field("", max_length=8000)
     source: str = Field("", max_length=MAX_SOURCE)
     model: str | None = Field(None, max_length=120)
     history: list[dict] = Field(default_factory=list)
-    temperature: float = Field(0.7, ge=0.0, le=1.5)
+    temperature: float | None = Field(None, ge=0.0, le=1.5)
 
 
 # ======================================================================= pages
@@ -195,6 +198,47 @@ def ai_compose(req: ComposeRequest, x_groq_key: str | None = Header(default=None
                           req.history, req.temperature)
     except ai.AIError as exc:
         return _ai_error(exc)
+
+
+@app.post("/api/ai/compose/stream")
+def ai_compose_stream(req: ComposeRequest, x_groq_key: str | None = Header(default=None)):
+    """The same as /api/ai/compose, but as newline-delimited JSON events: progress lines
+    while the model works (a full song can take several minutes and many parts), then
+    one `result` or `error` event.  Nothing here imposes a time limit."""
+    if req.action not in ai.ACTIONS:
+        raise HTTPException(400, "unknown action")
+    q: queue.Queue = queue.Queue()
+
+    def progress(message):
+        q.put({"event": "progress", "message": message})
+
+    def work():
+        try:
+            result = ai.compose(x_groq_key, req.model, req.action, req.prompt, req.source,
+                                req.history, req.temperature, on_progress=progress)
+            q.put(dict(result, event="result"))
+        except ai.AIError as exc:
+            q.put({"event": "error", "status": exc.status, "error": exc.code, "message": exc.message})
+        except Exception as exc:                                   # pragma: no cover
+            q.put({"event": "error", "status": 500, "error": "internal", "message": str(exc)[:300]})
+        q.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def lines():
+        yield json.dumps({"event": "progress", "message": "starting"}) + "\n"
+        while True:
+            try:
+                item = q.get(timeout=15)
+            except queue.Empty:
+                yield json.dumps({"event": "ping"}) + "\n"           # keep the connection alive
+                continue
+            if item is None:
+                break
+            yield json.dumps(item) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 # static files last so they never shadow the API

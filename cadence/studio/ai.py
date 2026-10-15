@@ -28,6 +28,10 @@ PREFERRED_MODELS = [
 ]
 NON_CHAT_HINTS = ("whisper", "tts", "guard", "orpheus", "playai", "embed", "allam")
 MAX_ATTEMPTS = 3
+MAX_OUTPUT_TOKENS = int(os.environ.get("GROQ_MAX_TOKENS", "8192"))        # per request; long pieces continue
+FALLBACK_OUTPUT_TOKENS = 4096                                              # for models with a lower ceiling
+MAX_CONTINUATIONS = int(os.environ.get("GROQ_MAX_CONTINUATIONS", "24"))   # a full song may take many parts
+REQUEST_TIMEOUT = float(os.environ.get("GROQ_TIMEOUT", "900"))             # seconds per request
 
 LANGUAGE_REFERENCE = """
 CADENCE LANGUAGE REFERENCE (this is the complete grammar; nothing else exists)
@@ -77,11 +81,12 @@ Your job: help the user compose expressive piano music in Cadence. You think lik
 Response rules:
 1. When you propose music, reply with EXACTLY ONE fenced code block tagged `cadence` containing a COMPLETE program (all declarations, phrases, voices, and the single play statement). Never reply with fragments. Keep the user's existing material unless asked to change it.
 2. After the code block, write a short plain-prose explanation (at most 120 words): what you did musically, and which Cadence constructs carry it (degrees, phrases with parameters, repeat, transpose, chords, parallel voices). No headings, no bullet lists.
-3. Prefer piano-family instruments. Two or three voices at most. Keep programs under about 45 lines.
+3. Prefer piano-family instruments. Use as many voices as the music needs. There is NO limit on length: match the length to the request, and a complete piece may run to hundreds of lines. Build long pieces from named phrases (one or a few bars each) and sections, and use `repeat n of` for literal repeats.
 4. Rhythm hygiene: in 4-beat bars, make each phrase last a whole number of bars so parallel voices line up. Note lengths: /1 whole, /2 half, /4 quarter, /8 eighth, /16 sixteenth, a trailing dot adds half.
 5. Use scale degrees (^1..^7) for melodies so the key is a single word, and literal notes (C3 E3 G3) for left-hand chords and bass where the register matters.
 6. If asked to explain rather than compose, answer in prose only, with no code block.
 7. Never invent syntax. If something is not in the reference below, it does not exist.
+8. Never abbreviate. Do not write comments such as "continue similarly" or "repeat for the remaining verses" in place of music: write every bar, or express the repetition with `repeat` and phrase references. If your message is cut off, you will be asked to continue; never restart from the top.
 """ + LANGUAGE_REFERENCE
 
 ACTIONS = {
@@ -99,6 +104,14 @@ ACTIONS = {
     "explain": "Explain, in plain prose for a pianist, what this piece does musically and how the Cadence "
                "constructs achieve it (key, degrees, phrases, repeats, transposition, parallel voices). "
                "Do not propose code.",
+    "song": "Reproduce the complete piece the user names, as faithfully as you can, from the first bar to the last: "
+            "every section in order (intro, verses, choruses, bridge, solo, outro; for a classical work every section "
+            "of the movement), the real key, tempo and metre, the melody exactly as it is sung or played, the harmony "
+            "under it and a bass line. Write it for piano (right hand melody, left hand accompaniment) unless the user "
+            "asks for other instruments. Define one phrase per section or per distinctive bar group and assemble the "
+            "voices from them; use `repeat n of` only for literal repeats. There is no limit on length: a full song is "
+            "typically 60 to 150 bars and the program may be several hundred lines. Do not summarise, do not leave "
+            "sections out, and do not stop until the final `play` statement is written.",
     "chat": "",
 }
 
@@ -123,7 +136,8 @@ def make_client(api_key: str | None):
         from groq import Groq
     except ImportError as exc:                                # pragma: no cover
         raise AIError(500, "The groq package is not installed: pip install groq", "no_sdk") from exc
-    return Groq(api_key=key)
+    # a long piece can take minutes to generate: no short deadline, a couple of retries
+    return Groq(api_key=key, timeout=REQUEST_TIMEOUT, max_retries=2)
 
 
 def _translate(exc: Exception) -> AIError:
@@ -161,18 +175,85 @@ def list_models(api_key: str | None) -> list[dict]:
     return out
 
 
-def chat_once(client, model: str, messages: list[dict], temperature=0.7, max_tokens=1800) -> str:
-    try:
-        resp = client.chat.completions.create(
-            model=model, messages=messages, temperature=temperature,
-            max_completion_tokens=max_tokens,
-        )
-    except Exception as exc:
-        raise _translate(exc) from exc
-    choice = resp.choices[0] if resp.choices else None
+def chat_once_full(client, model: str, messages: list[dict], temperature=0.7,
+                   max_tokens=None) -> tuple[str, str]:
+    """One request.  Returns (text, finish_reason); 'length' means the model hit the
+    token ceiling and must be asked to continue."""
+    want = max_tokens or MAX_OUTPUT_TOKENS
+    resp = None
+    for budget in (want, FALLBACK_OUTPUT_TOKENS):
+        try:
+            resp = client.chat.completions.create(
+                model=model, messages=messages, temperature=temperature,
+                max_completion_tokens=budget,
+            )
+            break
+        except Exception as exc:
+            text = str(exc)
+            if budget != FALLBACK_OUTPUT_TOKENS and ("max_completion_tokens" in text or "max_tokens" in text):
+                continue                      # this model has a lower ceiling: ask for less, continue later
+            raise _translate(exc) from exc
+    choice = resp.choices[0] if resp and resp.choices else None
     content = (choice.message.content if choice and choice.message else "") or ""
+    finish = (getattr(choice, "finish_reason", None) or "stop") if choice else "stop"
     # some reasoning models wrap their thinking in <think> tags: drop it
-    return re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip()
+    return re.sub(r"<think>.*?</think>", "", content, flags=re.S).strip(), finish
+
+
+def chat_once(client, model: str, messages: list[dict], temperature=0.7, max_tokens=None) -> str:
+    return chat_once_full(client, model, messages, temperature, max_tokens)[0]
+
+
+CONTINUE_PROMPT = (
+    "Your previous message was cut off before the program was complete. Continue it. Begin by repeating, in "
+    "full, the LAST line you wrote (so the two parts can be joined), then carry on with the next lines exactly "
+    "where you stopped. Do not restart the program, do not repeat earlier lines, and do not write any explanation "
+    "before the code. Finish the program through its `play` statement, close the code block, then add the short "
+    "explanation.")
+
+
+def needs_more(text: str, finish: str) -> bool:
+    """Was the reply cut short?  Yes if the token ceiling stopped the model, or if a
+    code fence was opened and never closed."""
+    if finish == "length":
+        return True
+    return "```" in text and text.count("```") % 2 == 1
+
+
+def stitch(acc: str, more: str) -> str:
+    """Join a continuation onto the text so far.  The continuation was asked to start by
+    repeating the last line already sent: drop that overlap, and any re-opened fence."""
+    lines = more.strip("\n").split("\n")
+    while lines and lines[0].strip().startswith("```"):
+        lines.pop(0)
+    head = acc.rstrip("\n")
+    acc_lines = head.split("\n")
+    for k in range(min(4, len(acc_lines), len(lines)), 0, -1):
+        tail = [l.strip() for l in acc_lines[-k:]]
+        first = [l.strip() for l in lines[:k]]
+        if any(tail) and tail == first:
+            return "\n".join(acc_lines[:-k] + lines)
+    last = acc_lines[-1].strip() if acc_lines else ""
+    if last and lines and lines[0].strip().startswith(last) and lines[0].strip() != last:
+        return "\n".join(acc_lines[:-1] + lines)        # acc ended on a cut-off fragment of this line
+    return head + "\n" + "\n".join(lines)
+
+
+def generate(client, model: str, messages: list[dict], temperature=0.7, on_progress=None) -> tuple[str, int]:
+    """Ask for a reply and keep asking for continuations until the program is complete.
+    Nothing limits the length except MAX_CONTINUATIONS requests."""
+    text, finish = chat_once_full(client, model, messages, temperature)
+    parts = 1
+    while needs_more(text, finish) and parts < MAX_CONTINUATIONS:
+        if on_progress:
+            on_progress(f"part {parts} received, {text.count(chr(10)) + 1} lines so far; asking the model to continue")
+        follow = messages + [{"role": "assistant", "content": text}, {"role": "user", "content": CONTINUE_PROMPT}]
+        more, finish = chat_once_full(client, model, follow, temperature)
+        if not more.strip():
+            break
+        text = stitch(text, more)
+        parts += 1
+    return text, parts
 
 
 # ======================================================================= code handling
@@ -182,7 +263,10 @@ FENCE = re.compile(r"```[ \t]*([A-Za-z0-9_+-]*)[^\n]*\n(.*?)```", re.S)
 def extract_code(text: str) -> str | None:
     """The fenced block most likely to be a Cadence program (it must contain `play`)."""
     best = None
-    for lang, body in FENCE.findall(text or ""):
+    text = text or ""
+    if text.count("```") % 2 == 1:
+        text += "\n```"                       # a fence left open by a cut-off reply still counts
+    for lang, body in FENCE.findall(text):
         body = body.strip("\n")
         if "play" not in body:
             continue
@@ -260,23 +344,34 @@ def build_messages(action: str, prompt: str, source: str, history: list[dict] | 
 
 
 def compose(api_key: str | None, model: str | None, action: str, prompt: str,
-            source: str, history: list[dict] | None = None, temperature=0.7) -> dict:
-    """Ask the model, compile what it proposes, and loop on failure."""
+            source: str, history: list[dict] | None = None, temperature=None,
+            on_progress=None) -> dict:
+    """Ask the model, compile what it proposes, and loop on failure.  Long replies are
+    continued until complete; `on_progress` is told what is happening along the way."""
     client = make_client(api_key)
     model = (model or DEFAULT_MODEL).strip()
+    if temperature is None:
+        temperature = 0.35 if action == "song" else 0.7   # faithful reproduction wants less invention
     messages = build_messages(action, prompt, source, history)
     attempts = []
     reply = ""
     code = None
     verified = None
+    parts_total = 0
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        reply = chat_once(client, model, messages, temperature=temperature)
+        if on_progress:
+            on_progress("asking the model" if attempt == 1 else
+                        f"asking the model to repair the program (attempt {attempt} of {MAX_ATTEMPTS})")
+        reply, parts = generate(client, model, messages, temperature, on_progress)
+        parts_total += parts
         code = extract_code(reply)
         if code is None:
-            attempts.append({"attempt": attempt, "code": False, "ok": None})
+            attempts.append({"attempt": attempt, "code": False, "ok": None, "parts": parts})
             break                                   # prose answer: nothing to verify
+        if on_progress:
+            on_progress(f"compiling the proposal ({code.count(chr(10)) + 1} lines)")
         verified = verify_code(code)
-        attempts.append({"attempt": attempt, "code": True, "ok": verified["ok"],
+        attempts.append({"attempt": attempt, "code": True, "ok": verified["ok"], "parts": parts,
                          "errors": len([e for e in verified["errors"] if e["severity"] == "error"])})
         if verified["ok"] or attempt == MAX_ATTEMPTS:
             break
@@ -291,6 +386,6 @@ def compose(api_key: str | None, model: str | None, action: str, prompt: str,
     return {
         "model": model, "action": action,
         "reply": reply, "prose": strip_code(reply), "code": code,
-        "verified": verified, "attempts": attempts,
+        "verified": verified, "attempts": attempts, "parts": parts_total,
         "repaired": len(attempts) > 1 and bool(verified and verified["ok"]),
     }

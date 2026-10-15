@@ -14,6 +14,7 @@ const ACTIONS = [
   { id: 'mood', label: 'Mood…', title: 're-colour the piece to a mood you describe' },
   { id: 'explain', label: 'Explain', title: 'what the piece does, in plain words' },
   { id: 'fix', label: 'Fix', title: 'repair the compile errors' },
+  { id: 'song', label: 'Full song…', title: 'reproduce a complete piece from the first bar to the last, however long it is' },
 ];
 
 export function createAssistant(host, ctx) {
@@ -122,6 +123,19 @@ export function createAssistant(host, ctx) {
       setTimeout(() => field.focus(), 50);
       return;
     }
+    if (id === 'song') {
+      const title = el('input', { type: 'text', placeholder: 'e.g. Für Elise — Beethoven, or River Flows in You — Yiruma', autocomplete: 'off' });
+      const notes = el('textarea', { rows: '3', placeholder: 'optional: which arrangement or sections, tempo, key, "add the bass as a third voice"…', style: { width: '100%', resize: 'vertical' } });
+      modal('Reproduce a full piece', el('div', {},
+        el('p', { html: 'Name the piece and its composer or artist. The composer writes it <b>from the first bar to the last</b>: every section, the real key and tempo, melody, harmony and bass. There is no limit on length; a long piece arrives in several parts and can take a few minutes.' }),
+        el('div.key-field', {}, title),
+        el('div', { style: { marginTop: '8px' } }, notes),
+        el('p.sub', { text: 'How faithful the result is depends on how well the model knows the piece. Well-known classical and traditional works come out best; every proposal is compiled before you see it.' })), {
+        actions: [{ label: 'Compose the whole piece', primary: true, onClick: () => { const t = title.value.trim(); if (t) ask('song', t + (notes.value.trim() ? ' — ' + notes.value.trim() : '')); } }],
+      });
+      setTimeout(() => title.focus(), 50);
+      return;
+    }
     ask(id, '');
   }
 
@@ -137,15 +151,20 @@ export function createAssistant(host, ctx) {
     if (!state.key && !state.keyInEnv) { openKeyModal(); return; }
     const source = ctx.getSource();
     const label = { continue: 'Continue the piece', harmonise: 'Harmonise the melody', vary: 'Write a variation',
-                    explain: 'Explain this piece', fix: 'Fix the compile errors', mood: 'Mood: ' + prompt }[action] || prompt;
+                    explain: 'Explain this piece', fix: 'Fix the compile errors', mood: 'Mood: ' + prompt,
+                    song: 'Full song: ' + prompt }[action] || prompt;
     addUser(label);
     state.history.push({ role: 'user', content: label });
     state.busy = true; setBusy(true);
-    const think = el('div.msg.assistant', {}, el('div.thinking', {}, el('span.bars', {}, el('i'), el('i'), el('i'), el('i'), el('i')), el('span', { text: action === 'explain' ? 'listening…' : 'composing…' })));
+    const thinkText = el('span', { text: action === 'explain' ? 'listening…' : 'composing…' });
+    const think = el('div.msg.assistant', {}, el('div.thinking', {}, el('span.bars', {}, el('i'), el('i'), el('i'), el('i'), el('i')), thinkText));
     thread.appendChild(think); scrollDown();
+    const started = Date.now();
     try {
-      const r = await api.aiCompose({ action, prompt, source, model: state.model || null, history: state.history.slice(-8) }, state.key);
+      const r = await api.aiComposeStream({ action, prompt, source, model: state.model || null, history: state.history.slice(-8) }, state.key,
+        (m) => { thinkText.textContent = `${m} · ${Math.round((Date.now() - started) / 1000)}s`; });
       think.remove();
+      if (r.parts > 1) r.prose = (r.prose || '') + `\n\n*Assembled from ${r.parts} parts.*`;
       addAssistant(r);
       state.history.push({ role: 'assistant', content: r.reply });
       setStatus('ok', 'model: ' + r.model);

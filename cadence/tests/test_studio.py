@@ -129,24 +129,79 @@ BROKEN = GOOD.replace("play right ;", "play rihgt ;")
 
 
 class _ScriptedModel:
-    """Stands in for Groq: returns canned replies in order and records the prompts."""
+    """Stands in for Groq: returns canned replies in order and records the prompts.
+    A reply may be a string (finish reason 'stop') or a (text, finish_reason) pair."""
 
     def __init__(self, replies):
         self.replies = list(replies)
         self.calls = []
 
-    def __call__(self, client, model, messages, temperature=0.7, max_tokens=1800):
+    def __call__(self, client, model, messages, temperature=0.7, max_tokens=None):
         self.calls.append(messages)
-        return self.replies.pop(0)
+        r = self.replies.pop(0)
+        return r if isinstance(r, tuple) else (r, "stop")
 
 
 class TestComposer(unittest.TestCase):
     def setUp(self):
-        self._client, self._chat = ai.make_client, ai.chat_once
+        self._client, self._chat = ai.make_client, ai.chat_once_full
         ai.make_client = lambda key: object()
 
     def tearDown(self):
-        ai.make_client, ai.chat_once = self._client, self._chat
+        ai.make_client, ai.chat_once_full = self._client, self._chat
+
+    # ---- long pieces: continuation and stitching ----------------------------------
+    def test_a_cut_off_program_is_continued_until_it_is_complete(self):
+        part1 = "```cadence\ntempo 100 ;\nkey C major ;\ninstrument piano = \"acoustic grand piano\" ;\nphrase idea = [ ^1 ^3"
+        part2 = "phrase idea = [ ^1 ^3 ^5 ^1'/2 ] ;\nvoice right on piano = repeat 2 of idea ;\nplay right ;\n```\nThe whole piece."
+        model = _ScriptedModel([(part1, "length"), (part2, "stop")])
+        ai.chat_once_full = model
+        out = ai.compose(None, "m", "song", "A short study", "")
+        self.assertTrue(out["verified"]["ok"], out["verified"])
+        self.assertEqual(out["parts"], 2)
+        self.assertEqual(out["code"].count("phrase idea"), 1, "the overlapping line must not be duplicated")
+        self.assertIn("play right ;", out["code"])
+        # the continuation request carries what was already written and asks to go on
+        self.assertEqual(model.calls[1][-2]["role"], "assistant")
+        self.assertIn("Continue", model.calls[1][-1]["content"])
+
+    def test_stitch_drops_repeated_lines_and_reopened_fences(self):
+        acc = "```cadence\ntempo 100 ;\nphrase a = [ C4 ] ;"
+        self.assertEqual(ai.stitch(acc, "```cadence\nphrase a = [ C4 ] ;\nplay v ;\n```"),
+                         "```cadence\ntempo 100 ;\nphrase a = [ C4 ] ;\nplay v ;\n```")
+        self.assertEqual(ai.stitch("tempo 100 ;\nphrase a = [ C4 D", "phrase a = [ C4 D4 ] ;\nplay v ;"),
+                         "tempo 100 ;\nphrase a = [ C4 D4 ] ;\nplay v ;")
+        self.assertEqual(ai.stitch("tempo 100 ;", "key C major ;"), "tempo 100 ;\nkey C major ;")
+
+    def test_needs_more_only_when_cut_off(self):
+        self.assertTrue(ai.needs_more("anything", "length"))
+        self.assertTrue(ai.needs_more("```cadence\ntempo 100 ;", "stop"))
+        self.assertFalse(ai.needs_more("```cadence\ntempo 100 ;\nplay v ;\n```", "stop"))
+        self.assertFalse(ai.needs_more("It is in C major.", "stop"))
+
+    def test_continuations_are_bounded(self):
+        old = ai.MAX_CONTINUATIONS
+        ai.MAX_CONTINUATIONS = 3
+        try:
+            ai.chat_once_full = _ScriptedModel([("```cadence\ntempo 100 ;", "length")] + [("velocity 90 ;", "length")] * 10)
+            out = ai.compose(None, "m", "song", "endless", "")
+            self.assertEqual(out["parts"], 3)
+        finally:
+            ai.MAX_CONTINUATIONS = old
+
+    def test_song_mode_asks_for_the_whole_piece_at_low_temperature(self):
+        seen = {}
+
+        def model(client, m, messages, temperature=0.7, max_tokens=None):
+            seen["temperature"] = temperature
+            seen["request"] = messages[-1]["content"]
+            return "no code", "stop"
+        ai.chat_once_full = model
+        ai.compose(None, "m", "song", "Für Elise — Beethoven", "")
+        self.assertLess(seen["temperature"], 0.5)
+        self.assertIn("from the first bar to the last", seen["request"])
+        self.assertIn("Für Elise", seen["request"])
+        self.assertIn("NO limit on length", ai.SYSTEM_PROMPT)
 
     def test_extract_code_prefers_the_block_with_play(self):
         text = "```text\nnot music\n```\nhere:\n```cadence\n" + GOOD + "```\nenjoy"
@@ -157,7 +212,7 @@ class TestComposer(unittest.TestCase):
     def test_a_rejected_program_is_sent_back_and_repaired(self):
         model = _ScriptedModel(["```cadence\n" + BROKEN + "```\nfirst try",
                                 "```cadence\n" + GOOD + "```\nfixed the voice name"])
-        ai.chat_once = model
+        ai.chat_once_full = model
         out = ai.compose(None, "test-model", "continue", "", GOOD)
         self.assertTrue(out["verified"]["ok"])
         self.assertTrue(out["repaired"])
@@ -169,14 +224,14 @@ class TestComposer(unittest.TestCase):
         self.assertIn("rihgt", feedback)
 
     def test_gives_up_after_max_attempts_but_reports_honestly(self):
-        ai.chat_once = _ScriptedModel(["```cadence\n" + BROKEN + "```"] * ai.MAX_ATTEMPTS)
+        ai.chat_once_full = _ScriptedModel(["```cadence\n" + BROKEN + "```"] * ai.MAX_ATTEMPTS)
         out = ai.compose(None, "m", "fix", "", BROKEN)
         self.assertFalse(out["verified"]["ok"])
         self.assertFalse(out["repaired"])
         self.assertEqual(len(out["attempts"]), ai.MAX_ATTEMPTS)
 
     def test_prose_answers_are_not_verified(self):
-        ai.chat_once = _ScriptedModel(["It is a rising arpeggio in C major."])
+        ai.chat_once_full = _ScriptedModel(["It is a rising arpeggio in C major."])
         out = ai.compose(None, "m", "explain", "", GOOD)
         self.assertIsNone(out["code"])
         self.assertIsNone(out["verified"])
@@ -184,7 +239,7 @@ class TestComposer(unittest.TestCase):
 
     def test_context_describes_the_users_score(self):
         model = _ScriptedModel(["just words"])
-        ai.chat_once = model
+        ai.chat_once_full = model
         ai.compose(None, "m", "harmonise", "make it warmer", GOOD)
         prompt = model.calls[0][-1]["content"]
         self.assertIn("key C major", prompt)
@@ -251,7 +306,10 @@ class TestServer(unittest.TestCase):
         self.assertTrue(all(e["line"] > 0 for e in d["errors"]))
 
     def test_oversized_source_is_refused(self):
-        self.assertEqual(self.client.post("/api/compile", json={"source": "x" * 70_000}).status_code, 422)
+        from studio.server import MAX_SOURCE
+        self.assertEqual(self.client.post("/api/compile", json={"source": "x" * (MAX_SOURCE + 1)}).status_code, 422)
+        # a full-length piece (tens of kilobytes) is well inside the limit
+        self.assertGreaterEqual(MAX_SOURCE, 500_000)
 
     def test_midi_download(self):
         r = self.client.post("/api/midi", json={"source": read("01_hello.cad"), "name": "01_hello.cad"})
@@ -281,6 +339,29 @@ class TestServer(unittest.TestCase):
         self.assertEqual(self.client.get("/api/core/compiler/../server.py").status_code, 404)
         self.assertEqual(self.client.get("/api/core/compiler/nope.py").status_code, 404)
         self.assertIn("# Cadence", self.client.get("/api/core/readme").json()["markdown"])
+
+    def test_compose_stream_reports_progress_then_a_result(self):
+        import json as _json
+
+        def fake_compose(key, model, action, prompt, source, history, temperature, on_progress=None):
+            on_progress("asking the model")
+            on_progress("part 1 received, 40 lines so far; asking the model to continue")
+            return {"model": "m", "action": action, "reply": "r", "prose": "", "code": None,
+                    "verified": None, "attempts": [], "parts": 2, "repaired": False}
+        from studio import ai as _ai
+        old = _ai.compose
+        _ai.compose = fake_compose
+        try:
+            with self.client.stream("POST", "/api/ai/compose/stream", json={"action": "song", "prompt": "x"}) as r:
+                self.assertEqual(r.status_code, 200)
+                events = [_json.loads(l) for l in r.iter_lines() if l.strip()]
+        finally:
+            _ai.compose = old
+        kinds = [e["event"] for e in events]
+        self.assertEqual(kinds[-1], "result")
+        self.assertEqual(kinds.count("progress"), 3)
+        self.assertEqual(events[-1]["parts"], 2)
+        self.assertEqual(self.client.post("/api/ai/compose/stream", json={"action": "nope"}).status_code, 400)
 
     def test_ai_endpoints_fail_cleanly_without_a_valid_key(self):
         r = self.client.get("/api/ai/models", headers={"X-Groq-Key": "gsk_not_a_real_key"})
