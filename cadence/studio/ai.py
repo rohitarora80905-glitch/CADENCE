@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from cadence.driver import compile_source
 from cadence.semantics import PC_NAMES
 
+from . import arranger, karaoke as karaoke_chart
+
 DEFAULT_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 PREFERRED_MODELS = [
     "llama-3.3-70b-versatile",
@@ -112,6 +114,7 @@ ACTIONS = {
             "voices from them; use `repeat n of` only for literal repeats. There is no limit on length: a full song is "
             "typically 60 to 150 bars and the program may be several hundred lines. Do not summarise, do not leave "
             "sections out, and do not stop until the final `play` statement is written.",
+    "karaoke": "",          # handled by karaoke(): the model gives a chart, the arranger writes the band
     "chat": "",
 }
 
@@ -350,6 +353,8 @@ def compose(api_key: str | None, model: str | None, action: str, prompt: str,
     continued until complete; `on_progress` is told what is happening along the way."""
     client = make_client(api_key)
     model = (model or DEFAULT_MODEL).strip()
+    if action == "karaoke":
+        return karaoke(client, model, prompt, on_progress, 0.2 if temperature is None else temperature)
     if temperature is None:
         temperature = 0.35 if action == "song" else 0.7   # faithful reproduction wants less invention
     messages = build_messages(action, prompt, source, history)
@@ -386,6 +391,47 @@ def compose(api_key: str | None, model: str | None, action: str, prompt: str,
     return {
         "model": model, "action": action,
         "reply": reply, "prose": strip_code(reply), "code": code,
+        "verified": verified, "attempts": attempts, "parts": parts_total,
+        "repaired": len(attempts) > 1 and bool(verified and verified["ok"]),
+    }
+
+
+def karaoke(client, model: str, prompt: str, on_progress=None, temperature=0.2) -> dict:
+    """Ask for the chart, arrange it deterministically, compile the arrangement."""
+    messages = karaoke_chart.chart_messages(prompt)
+    attempts, reply, chart, code, verified, parts_total = [], "", None, None, None, 0
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        if on_progress:
+            on_progress("asking the model for the song's chart" if attempt == 1 else
+                        f"asking the model to correct the chart (attempt {attempt} of {MAX_ATTEMPTS})")
+        reply, parts = generate(client, model, messages, temperature, on_progress)
+        parts_total += parts
+        try:
+            chart = karaoke_chart.parse_chart(reply)
+            if on_progress:
+                on_progress(f"arranging {sum(s['bars'] for s in chart['sections'])} bars in the {chart['style']} style")
+            code = arranger.arrange(chart)
+        except (ValueError, arranger.ChartError) as exc:
+            attempts.append({"attempt": attempt, "code": False, "ok": False, "parts": parts, "error": str(exc)})
+            messages.append({"role": "assistant", "content": reply})
+            messages.append({"role": "user", "content":
+                             f"That chart could not be used: {exc}. Reply again with the corrected JSON object only."})
+            continue
+        if on_progress:
+            on_progress("compiling the arrangement")
+        verified = verify_code(code)
+        attempts.append({"attempt": attempt, "code": True, "ok": verified["ok"], "parts": parts,
+                         "errors": len([e for e in verified["errors"] if e["severity"] == "error"])})
+        if verified["ok"]:
+            break
+        feedback = "; ".join(e["message"] for e in verified["errors"] if e["severity"] == "error")[:600]
+        messages.append({"role": "assistant", "content": reply})
+        messages.append({"role": "user", "content":
+                         f"The arrangement of that chart did not compile ({feedback}). Simplify the chord symbols "
+                         "and reply again with the corrected JSON object only."})
+    prose = karaoke_chart.describe(chart) if chart else ("The model did not return a usable chart. " + reply[:400])
+    return {
+        "model": model, "action": "karaoke", "reply": reply, "prose": prose, "code": code, "chart": chart,
         "verified": verified, "attempts": attempts, "parts": parts_total,
         "repaired": len(attempts) > 1 and bool(verified and verified["ok"]),
     }

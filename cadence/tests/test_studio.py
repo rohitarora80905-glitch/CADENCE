@@ -261,6 +261,125 @@ class TestComposer(unittest.TestCase):
                 os.environ["GROQ_API_KEY"] = old
 
 
+# ===================================================================== the arranger and karaoke
+from studio import arranger, midi_import                        # noqa: E402
+
+CHART = {"title": "Test", "artist": "T", "key": "F# minor", "tempo": 90, "style": "edm",
+         "sections": [{"name": "intro", "bars": 4, "chords": ["F#m", "D", "A", "E"], "dynamics": "soft"},
+                      {"name": "verse", "bars": 8, "chords": ["F#m", "D", "A E", "N.C."]},
+                      {"name": "chorus", "bars": 8, "chords": ["F#m7", "Dmaj7/F#", "Asus2", "E7"]}]}
+
+
+class TestArranger(unittest.TestCase):
+    def test_chord_symbols(self):
+        self.assertEqual(arranger.parse_chord("F#m7/A"), (6, [0, 3, 7, 10], 9, False))
+        self.assertEqual(arranger.parse_chord("Bb"), (10, [0, 4, 7], None, True))
+        self.assertEqual(arranger.parse_chord("Cmaj7")[1], [0, 4, 7, 11])
+        self.assertEqual(arranger.parse_chord("G#dim")[1], [0, 3, 6])
+        self.assertIsNone(arranger.parse_chord("N.C."))
+        with self.assertRaises(arranger.ChartError) as cm:
+            arranger.parse_chord("Hm")
+        self.assertIn("Hm", str(cm.exception))
+        with self.assertRaises(arranger.ChartError):
+            arranger.parse_chord("Cxyz")
+
+    def test_every_style_compiles_and_stays_aligned(self):
+        for style in arranger.STYLES:
+            with self.subTest(style):
+                chart = dict(CHART, style=style, time="3/4" if style == "waltz" else "4/4")
+                src = arranger.arrange(chart)
+                r = compile_source(src, style, want_dataflow=False)
+                self.assertTrue(r.ok(), [e.message for e in r.hard_errors])
+                self.assertEqual(r.warnings, [])
+                ends = {end for _, end in r.events1.values()}
+                bar = 1440 if style == "waltz" else 1920
+                self.assertEqual(ends, {20 * bar}, "every part must end on the last bar")
+
+    def test_chart_errors_are_precise(self):
+        with self.assertRaises(arranger.ChartError) as cm:
+            arranger.arrange(dict(CHART, style="polka"))
+        self.assertIn("polka", str(cm.exception))
+        bad = dict(CHART, sections=[{"name": "x", "bars": 2, "chords": ["Am", "Qm"]}])
+        with self.assertRaises(arranger.ChartError) as cm:
+            arranger.arrange(bad)
+        self.assertIn("Qm", str(cm.exception))
+        with self.assertRaises(arranger.ChartError):
+            arranger.arrange(dict(CHART, key="H major"))
+
+    def test_key_spellings(self):
+        self.assertEqual(arranger.parse_key("F#m"), "F# minor")
+        self.assertEqual(arranger.parse_key("Bb"), "Bb major")
+        self.assertEqual(arranger.parse_key("A dorian"), "A dorian")
+        self.assertEqual(arranger.parse_key("c# minor"), "C# minor")
+
+    def test_no_melody_and_no_lyrics_in_the_output(self):
+        src = arranger.arrange(CHART)
+        self.assertIn("no vocal melody", src)
+        self.assertIn("play keys", src)
+
+
+class TestKaraoke(unittest.TestCase):
+    def setUp(self):
+        self._client, self._chat = ai.make_client, ai.chat_once_full
+        ai.make_client = lambda key: object()
+
+    def tearDown(self):
+        ai.make_client, ai.chat_once_full = self._client, self._chat
+
+    def test_chart_becomes_a_compiled_backing_track(self):
+        import json as _json
+        ai.chat_once_full = _ScriptedModel(["```json\n" + _json.dumps(CHART) + "\n```"])
+        out = ai.compose(None, "m", "karaoke", "Test by T", "")
+        self.assertTrue(out["verified"]["ok"], out["verified"])
+        self.assertEqual(out["chart"]["key"], "F# minor")
+        self.assertIn("90 bpm", out["prose"])
+        self.assertIn("F#m | D | A E | N.C.", out["prose"])
+        self.assertIn("velocity", out["code"])
+
+    def test_a_bad_chart_is_sent_back_for_correction(self):
+        import json as _json
+        bad = dict(CHART, sections=[{"name": "verse", "bars": 4, "chords": ["Am", "Hm"]}])
+        model = _ScriptedModel([_json.dumps(bad), _json.dumps(CHART)])
+        ai.chat_once_full = model
+        out = ai.compose(None, "m", "karaoke", "Test", "")
+        self.assertTrue(out["verified"]["ok"])
+        self.assertEqual(len(out["attempts"]), 2)
+        self.assertIn("Hm", model.calls[1][-1]["content"])
+        self.assertIn("Do NOT include the melody", model.calls[0][0]["content"])
+
+
+class TestMidiImport(unittest.TestCase):
+    def _on_events(self, r):
+        import collections
+        c = collections.Counter()
+        for ev, _ in r.events1.values():
+            for e in ev:
+                if e.kind == "on":
+                    c[(e.time, e.pitch)] += 1
+        return c
+
+    def test_round_trip_keeps_every_note_and_its_timing(self):
+        for fn in ("01_hello.cad", "03_riff.cad", "05_drums.cad", "07_showcase.cad"):
+            with self.subTest(fn):
+                r1 = compile_source(read(fn), fn, want_dataflow=False)
+                out = midi_import.to_cadence(serialize.midi_blob(r1), fn)
+                r2 = compile_source(out["source"], "imported", want_dataflow=False)
+                self.assertTrue(r2.ok(), [e.message for e in r2.hard_errors])
+                self.assertEqual(self._on_events(r1), self._on_events(r2))
+                self.assertEqual(out["tempo"], r1.analyser.tempo)
+
+    def test_drums_and_programs_survive(self):
+        r1 = compile_source(read("05_drums.cad"), "d", want_dataflow=False)
+        out = midi_import.to_cadence(serialize.midi_blob(r1), "d.mid")
+        self.assertIn("= drums ;", out["source"])
+        self.assertIn("= 36 ;", out["source"])              # slap bass 1
+        self.assertEqual(len(out["voices"]), 2)
+
+    def test_garbage_is_rejected(self):
+        with self.assertRaises(midi_import.MidiError):
+            midi_import.to_cadence(b"not a midi file", "x.mid")
+
+
 # ===================================================================== the server
 @unittest.skipUnless(HAVE_SERVER, "fastapi / httpx are not installed")
 class TestServer(unittest.TestCase):
@@ -339,6 +458,19 @@ class TestServer(unittest.TestCase):
         self.assertEqual(self.client.get("/api/core/compiler/../server.py").status_code, 404)
         self.assertEqual(self.client.get("/api/core/compiler/nope.py").status_code, 404)
         self.assertIn("# Cadence", self.client.get("/api/core/readme").json()["markdown"])
+
+    def test_arrange_and_import_endpoints(self):
+        r = self.client.post("/api/arrange", json={"chart": CHART})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["verified"]["ok"])
+        self.assertIn("F# minor", r.json()["summary"])
+        self.assertEqual(self.client.post("/api/arrange", json={"chart": dict(CHART, style="polka")}).status_code, 422)
+        blob = serialize.midi_blob(compile_source(read("03_riff.cad"), "r", want_dataflow=False))
+        r = self.client.post("/api/import/midi", files={"file": ("riff.mid", blob, "audio/midi")})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["verified"]["ok"])
+        self.assertEqual(r.json()["tempo"], 120)
+        self.assertEqual(self.client.post("/api/import/midi", files={"file": ("x.mid", b"nope", "audio/midi")}).status_code, 422)
 
     def test_compose_stream_reports_progress_then_a_result(self):
         import json as _json

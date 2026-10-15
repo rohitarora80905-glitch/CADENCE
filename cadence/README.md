@@ -71,6 +71,23 @@ For the composer, set `GROQ_API_KEY` in the environment or paste a key into the
 Composer panel (it stays in your browser's localStorage and is only ever sent to
 your own Studio server). Without a key, everything else works.
 
+**Karaoke** (the `Karaoke…` button) is the reliable way to get a song's backing
+track. The model is asked only for the song's *chart*: key, tempo, time, style,
+and the chord of every bar of every section, as a session musician reads it from
+a lead sheet. `studio/arranger.py` then writes the band deterministically in one
+of ten styles (pop, ballad, edm, dancehall, rock, hiphop, funk, bossa, waltz,
+jazz): keys, bass, drums, pads and a riff, every bar generated on a sixteenth
+grid so the parts cannot drift apart, compiled before you see it. No vocal line
+and no lyrics. The chart is shown with the program so it can be checked against
+a lead sheet; `POST /api/arrange` arranges a chart you supply yourself.
+
+**Import MIDI** (the button in the Score panel) is the exact way. A `.mid` file
+of a song becomes a Cadence program through `studio/midi_import.py`: one voice per
+monophonic lane of each track, chords kept as chords, drums on their channel,
+the file's tempo and key signature. Remove the vocal voice from `play` and the
+remainder is the recording's own backing, bar for bar. The compiler's own output
+round-trips through the importer note for note (`tests/test_studio.py`).
+
 **Full song** (the `Full song…` button) asks the model to reproduce a complete
 piece from the first bar to the last. There is no length or time limit: when the
 model's reply is cut off at its token ceiling the server asks it to continue,

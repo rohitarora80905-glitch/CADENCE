@@ -27,7 +27,7 @@ import threading
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -37,7 +37,7 @@ from cadence import __version__ as compiler_version
 from cadence.driver import compile_source, toolchain
 
 from . import __version__ as studio_version
-from . import ai, core_info, presets
+from . import ai, arranger, core_info, midi_import, presets
 from .serialize import grammar_json, lexer_json, midi_blob, result_json
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -69,6 +69,10 @@ class CompileRequest(BaseModel):
     level: int = Field(2, ge=0, le=2)
     articulate: bool = False
     midi: bool = True
+
+
+class ChartRequest(BaseModel):
+    chart: dict
 
 
 class ComposeRequest(BaseModel):
@@ -117,6 +121,31 @@ def midi_endpoint(req: CompileRequest):
     stem = os.path.splitext(os.path.basename(req.name or "score"))[0] or "score"
     return Response(blob, media_type="audio/midi",
                     headers={"Content-Disposition": f'attachment; filename="{stem}.mid"'})
+
+
+@app.post("/api/arrange")
+def arrange_endpoint(req: ChartRequest):
+    """A chart (key, tempo, style, sections with chords) -> a compiled backing track."""
+    try:
+        src = arranger.arrange(req.chart)
+        summary = arranger.chart_summary(req.chart)
+    except arranger.ChartError as exc:
+        raise HTTPException(422, str(exc))
+    return {"source": src, "summary": summary, "verified": ai.verify_code(src)}
+
+
+@app.post("/api/import/midi")
+async def import_midi(file: UploadFile = File(...)):
+    """A Standard MIDI File -> a Cadence program, one voice per lane of each track."""
+    data = await file.read()
+    if len(data) > 8_000_000:
+        raise HTTPException(413, "MIDI file too large (8 MB limit)")
+    try:
+        out = midi_import.to_cadence(data, file.filename or "import.mid")
+    except (midi_import.MidiError, IndexError, ValueError) as exc:
+        raise HTTPException(422, f"could not read that MIDI file: {exc}")
+    out["verified"] = ai.verify_code(out["source"])
+    return out
 
 
 @app.get("/api/examples")

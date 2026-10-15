@@ -14,6 +14,7 @@ const ACTIONS = [
   { id: 'mood', label: 'Mood…', title: 're-colour the piece to a mood you describe' },
   { id: 'explain', label: 'Explain', title: 'what the piece does, in plain words' },
   { id: 'fix', label: 'Fix', title: 'repair the compile errors' },
+  { id: 'karaoke', label: 'Karaoke…', title: 'a backing track from the song\'s chart: real key, tempo, chords, groove, bass and pads, with no vocal' },
   { id: 'song', label: 'Full song…', title: 'reproduce a complete piece from the first bar to the last, however long it is' },
 ];
 
@@ -123,6 +124,22 @@ export function createAssistant(host, ctx) {
       setTimeout(() => field.focus(), 50);
       return;
     }
+    if (id === 'karaoke') {
+      const title = el('input', { type: 'text', placeholder: 'e.g. Shape of You — Ed Sheeran', autocomplete: 'off' });
+      const style = el('select', {}, el('option', { value: 'auto', text: 'style: let the model choose' }),
+        ...['pop', 'ballad', 'edm', 'dancehall', 'rock', 'hiphop', 'funk', 'bossa', 'waltz', 'jazz'].map((s) => el('option', { value: s, text: 'style: ' + s })));
+      const notes = el('textarea', { rows: '2', placeholder: 'optional: "capo 2, play it in A", "only intro, verse and chorus", "no drums"…', style: { width: '100%', resize: 'vertical' } });
+      modal('Karaoke backing track', el('div', {},
+        el('p', { html: 'The model is asked only for the song\'s <b>chart</b>: key, tempo, form and the chord of every bar, as a session musician would read it. The Studio\'s arranger then writes the band in that style, bar-aligned by construction, and compiles it. No vocal line, no lyrics.' }),
+        el('div.key-field', {}, title),
+        el('div', { style: { marginTop: '8px', display: 'flex', gap: '8px' } }, style),
+        el('div', { style: { marginTop: '8px' } }, notes),
+        el('p.sub', { text: 'The chart is shown with the program so you can check the chords against a lead sheet and edit either.' })), {
+        actions: [{ label: 'Build the backing track', primary: true, onClick: () => { const t = title.value.trim(); if (t) ask('karaoke', t + (style.value !== 'auto' ? ` (style: ${style.value})` : '') + (notes.value.trim() ? ' — ' + notes.value.trim() : '')); } }],
+      });
+      setTimeout(() => title.focus(), 50);
+      return;
+    }
     if (id === 'song') {
       const title = el('input', { type: 'text', placeholder: 'e.g. Für Elise — Beethoven, or River Flows in You — Yiruma', autocomplete: 'off' });
       const notes = el('textarea', { rows: '3', placeholder: 'optional: which arrangement or sections, tempo, key, "add the bass as a third voice"…', style: { width: '100%', resize: 'vertical' } });
@@ -152,7 +169,7 @@ export function createAssistant(host, ctx) {
     const source = ctx.getSource();
     const label = { continue: 'Continue the piece', harmonise: 'Harmonise the melody', vary: 'Write a variation',
                     explain: 'Explain this piece', fix: 'Fix the compile errors', mood: 'Mood: ' + prompt,
-                    song: 'Full song: ' + prompt }[action] || prompt;
+                    song: 'Full song: ' + prompt, karaoke: 'Karaoke: ' + prompt }[action] || prompt;
     addUser(label);
     state.history.push({ role: 'user', content: label });
     state.busy = true; setBusy(true);

@@ -56,6 +56,8 @@ Then use the buttons: **Continue** adds what comes next, **Harmonise** adds a le
 
 Every proposal is compiled before you see it: a green badge means it compiles, a red one lists the errors. **Replace score** takes it, **Audition** plays it without touching your score, **Insert at cursor** adds it where you are.
 
+**Karaoke...** builds a backing track for a song you name: the model gives only the chart (key, tempo, chords per bar, form) and the Studio arranges keys, bass, drums, pads and a riff in the song's style, bar-aligned and compiled, with no vocal. **Import MIDI** in the Score panel turns a `.mid` file you have into a program, one voice per part; delete the vocal voice from `play` for an exact backing.
+
 **Full song...** reproduces a complete piece you name, from the first bar to the last, with no limit on length: a long piece arrives in several parts, each stitched on and compiled, and the panel shows the progress while it works. Use the roll's zoom (8 to 64 bars per screen) to read it; the roll scrolls to follow the playhead.
 
 ## Look inside the compiler

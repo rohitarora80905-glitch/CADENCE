@@ -393,6 +393,26 @@ function wireTopbar() {
   $('#btn-help').addEventListener('click', openHelp);
   $('#btn-moods').addEventListener('click', () => toggleDrawer('moods'));
   $('#btn-examples').addEventListener('click', () => toggleDrawer('examples'));
+  // Import MIDI: the exact notes of any song you have as a .mid, one voice per lane
+  const picker = el('input', { type: 'file', accept: '.mid,.midi,audio/midi', style: { display: 'none' } });
+  const importBtn = el('button.chip', { text: 'Import MIDI', title: 'turn a .mid file into a Cadence program (drop the vocal voice from play for karaoke)' });
+  importBtn.addEventListener('click', () => picker.click());
+  picker.addEventListener('change', async () => {
+    const file = picker.files && picker.files[0];
+    picker.value = '';
+    if (!file) return;
+    toast(`Importing ${file.name}…`);
+    try {
+      const out = await api.importMidi(file);
+      loadSource(out.source, file.name.replace(/\.midi?$/i, '') + '.cad');
+      await compileNow({ manual: true });
+      const warn = out.warnings && out.warnings.length ? ' · ' + out.warnings[0] : '';
+      toast(`Imported ${out.tracks.length} track${out.tracks.length === 1 ? '' : 's'} as ${out.voices.length} voice${out.voices.length === 1 ? '' : 's'}, ${out.tempo} bpm, ${out.key}${warn}`, 'ok', 6000);
+    } catch (e) {
+      toast('Import failed: ' + e.message, 'bad', 6000);
+    }
+  });
+  $('#btn-examples').after(importBtn, picker);
   const auto = $('#chk-auto');
   auto.checked = store.get(STORE.auto, '1') === '1';
   state.auto = auto.checked;

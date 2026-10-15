@@ -30,6 +30,15 @@ export const api = {
   coreSource: (group, file) => request('GET', `/api/core/${encodeURIComponent(group)}/${encodeURIComponent(file)}`),
   readme: () => request('GET', '/api/core/readme'),
   aiModels: (key) => request('GET', '/api/ai/models', null, key ? { 'X-Groq-Key': key } : {}),
+  arrange: (chart) => request('POST', '/api/arrange', { chart }),
+  importMidi: async (file) => {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const res = await fetch('/api/import/midi', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const err = new Error(data.detail || data.message || res.statusText); err.status = res.status; throw err; }
+    return data;
+  },
   aiCompose: (payload, key) => request('POST', '/api/ai/compose', payload, key ? { 'X-Groq-Key': key } : {}),
   /* The streaming variant: progress lines arrive while the model works, with no time
      limit on the browser side; resolves with the final result. */
