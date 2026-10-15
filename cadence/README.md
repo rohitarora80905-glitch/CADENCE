@@ -72,7 +72,8 @@ Composer panel (it stays in your browser's localStorage and is only ever sent to
 your own Studio server). Without a key, everything else works.
 
 A two-page how-to lives in `docs/Cadence_Studio_How_To_Use.pdf` (Markdown source
-alongside it).
+alongside it). The full project report, on the BCSE307P template with screenshots
+of every phase, is `docs/Cadence_Project_Report_Team9.pdf` (Word source alongside).
 
 ```
 studio/
